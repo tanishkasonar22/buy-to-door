@@ -117,8 +117,9 @@ describe('real mode: the verdict is always visible', () => {
     const base = '[firewall] decision=deny reason=';
     expect(await line(ok({ identity: { ...identity('Yes'), }, authentication: authOk })))
       .toBe(`${base}unreadable_response ageClaimType=string ageClaimPath=identity.age_over_21 ageClaimLength=3 ageClaimString=other`);
-    expect(await line(ok({ identity: identity('FALSE'), authentication: authOk })))
-      .toBe(`${base}unreadable_response ageClaimType=string ageClaimPath=identity.age_over_21 ageClaimLength=5 ageClaimString=false-like`);
+    // Under a namespace (not identity), so the Credence adapter leaves the string for the firewall to refuse.
+    expect(await line(ok({ [NS]: identity('FALSE'), authentication: authOk })))
+      .toBe(`${base}unreadable_response ageClaimType=string ageClaimPath=["${NS}"].age_over_21 ageClaimLength=5 ageClaimString=false-like`);
     expect(await line(ok({ documents: [{ [NS]: identity(1), authentication: authOk }] })))
       .toBe(`${base}unreadable_response ageClaimType=number ageClaimPath=documents[0]["${NS}"].age_over_21`);
     expect(await line(ok({ identity: identity({ value: true }), authentication: authOk })))

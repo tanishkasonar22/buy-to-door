@@ -22,13 +22,52 @@ export interface IdentityVerifier {
   liveRequests?(): number;
 }
 
+const AGE_FLAG = /^age_over_\d+$/;
+// Exactly "true" or "false" in any ASCII letter case. Without the u flag, /i never matches non-ASCII
+// look-alikes (for example the long s), and no whitespace or other spelling is accepted.
+const TRUE_OR_FALSE = /^(?:true|false)$/i;
+
+/**
+ * Credence returns age flags such as identity.age_over_21 as strings ("true", "True", ...) rather than
+ * booleans. This converts the words true / false, in any ASCII letter case, to real booleans, for
+ * age_over_<number> keys directly under `identity` and under each `documents[].identity`, and nothing
+ * else: "yes", "1", "t", anything with whitespace, other keys (the portrait included) and other paths
+ * are left as they are, so the firewall still refuses them. When nothing needs converting, the response
+ * is returned unchanged.
+ */
+export function normalizeCredenceAgeFlags(raw: RawVerification): RawVerification {
+  if (!raw || typeof raw.resDetails !== 'string') return raw;
+  let details: any;
+  try {
+    details = JSON.parse(raw.resDetails);
+  } catch {
+    return raw; // not JSON (for example an error description): nothing to convert
+  }
+  if (!details || typeof details !== 'object') return raw;
+  let changed = false;
+  const convert = (identity: unknown) => {
+    if (!identity || typeof identity !== 'object' || Array.isArray(identity)) return;
+    const claims = identity as Record<string, unknown>;
+    for (const [key, value] of Object.entries(claims)) {
+      if (AGE_FLAG.test(key) && typeof value === 'string' && TRUE_OR_FALSE.test(value)) {
+        claims[key] = value.toLowerCase() === 'true';
+        changed = true;
+      }
+    }
+  };
+  convert(details.identity);
+  if (Array.isArray(details.documents)) for (const doc of details.documents) if (doc && typeof doc === 'object') convert(doc.identity);
+  return changed ? { ...raw, resDetails: JSON.stringify(details) } : raw;
+}
+
 export class CredenceVerifier implements IdentityVerifier {
   constructor(private client: CloudSdkClient) {}
   start() {
     return this.client.getDocRequest();
   }
-  verify(sessionId: string, data: string) {
-    return this.client.verifyDocRequest(sessionId, data);
+  /** The Credence adapter boundary: age flags arrive as strings and are made booleans here, before the firewall. */
+  async verify(sessionId: string, data: string) {
+    return normalizeCredenceAgeFlags(await this.client.verifyDocRequest(sessionId, data));
   }
 }
 

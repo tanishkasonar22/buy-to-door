@@ -116,6 +116,11 @@ For `unreadable_response` and `age_claim_missing`, the line instead describes th
 found (keys only); for a string, `ageClaimString` says whether it reads as "true", "false" or other.
 `resDetails=unparseable` means Credence's `resDetails` was not JSON at all.
 
+Credence sends age flags such as `identity.age_over_21` as strings (for example `"True"`), so the Credence
+adapter (`normalizeCredenceAgeFlags` in `src/identity.ts`) converts the words `true` / `false`, in any ASCII
+letter case, to booleans under `identity` and `documents[].identity` before the firewall; anything else
+(`"yes"`, `"1"`, extra whitespace) is still refused.
+
 | Field | What it means if it is wrong |
 | --- | --- |
 | `issuerRecognized: false` | Credence does not trust the issuer of this credential. Check that the **issuer.multipaz.org root IACA certificate** is uploaded for the profile you are using, and that the credential in the wallet was issued by issuer.multipaz.org. The shop shows "The ID did not pass a security check." |
