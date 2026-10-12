@@ -65,6 +65,43 @@ The code has only been tested against fake SDK responses (see "What could not be
 | "The identity service could not complete the request" | The Cloud SDK call failed. The server log shows `CloudSdkError … HTTP nnn`. A 403 usually means `CLOUDSDK_ORIGIN` does not exactly match the registered origin. |
 | No wallet chooser appears | Old Chrome, not Chrome, or the page was opened on a different device from the wallet. |
 
+## Quick switch: `?dcdata=deviceRequest`
+
+By default the shop does what Credence's official sample app does (React-CloudSDK-Integration,
+`useISO18013Flow`): it passes the **whole** `dcRequest` object (`deviceRequest` and `encryptionInfo`) to the
+wallet as the request `data`.
+
+If the wallet chooser does not open, or the wallet reports a bad request, try the other form without changing
+any code. Add `?dcdata=deviceRequest` to the shop address on the phone:
+
+    https://<your-ngrok-address>/?dcdata=deviceRequest
+
+With this flag only `dcRequest.deviceRequest` is passed. Remove it to go back to the default. It affects real
+mode only; the hybrid and mock wallets ignore it.
+
+## Reading the authentication block (DEV_INSPECT)
+
+With `DEV_INSPECT=1`, every verification prints one line that starts like this:
+
+    [inspect] raw verifier response (portrait redacted): {"res":true,"cancelled":false,"authentication":{…}} resDetails={…}
+
+`res`, `cancelled` and the whole `authentication` block are printed first and in full: they are flags and
+short error strings, not personal data. The rest of `resDetails` follows, with the portrait shown only as
+`[portrait omitted, N bytes]`.
+
+| Field | What it means if it is wrong |
+| --- | --- |
+| `issuerRecognized: false` | Credence does not trust the issuer of this credential. Check that the **issuer.multipaz.org root IACA certificate** is uploaded for the profile you are using, and that the credential in the wallet was issued by issuer.multipaz.org. The shop shows "The ID did not pass a security check." |
+| `certValidationError` (any text) | Why the certificate chain failed, in Credence's words, for example an unknown or expired certificate. Read this first when `issuerRecognized` is false. Empty or missing means no certificate problem. |
+| `issuerSignedAuthenticated` / `issuerAuthValid: false` | The issuer's signature on the data did not check out. |
+| `deviceSignedAuthenticated` / `deviceAuthValid: false` | The phone's own signature (device binding) did not check out. |
+| `dataIntegrity: false`, `msoValidity: false` | The data or its signed summary (MSO) is damaged or expired. |
+| `authenticationResult` | Credence's overall verdict as text. |
+
+The shop refuses whenever any of `issuerRecognized`, `issuerSignedAuthenticated`, `deviceSignedAuthenticated`
+or `dataIntegrity` is `false`, even if `res` is true. The other fields are shown to help diagnose, but they do
+not change the decision.
+
 ## Switch back to hybrid
 
 1. In `.env`, set `VERIFIER_MODE=hybrid` and `DEV_INSPECT=0`.
@@ -75,10 +112,10 @@ The code has only been tested against fake SDK responses (see "What could not be
 
 ## What could not be verified without a real credential
 
-- **The exact shape of `credential.data`.** The browser sends the wallet's answer to the server as text: a
-  string as is, or an object turned into JSON. The server passes it on to `/v1/verifyDocRequest` as
-  `{sessionId, data}`. If Credence expects the object itself rather than JSON text, verification will fail with
-  an HTTP error. Worth confirming with Credence before the test.
+- **The request and answer format, on a real phone.** The shop now matches Credence's official sample: the
+  whole `dcRequest` goes to the wallet, and `credential.data` goes to `/v1/verifyDocRequest` as `{sessionId, data}`
+  (a string as is, an object as JSON text). This is checked in tests against fakes only. If the wallet will not
+  open, try `?dcdata=deviceRequest` (see above).
 - **Where the Age Check profile puts `age_over_21` in `resDetails`.** The server now finds it at any depth: top
   level, under `identity`, under a namespace such as `org.iso.18013.5.1`, or in an
   `elementIdentifier`/`elementValue` list. This was tested only with made-up shapes.

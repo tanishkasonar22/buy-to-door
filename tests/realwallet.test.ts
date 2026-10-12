@@ -109,6 +109,54 @@ describe('real mode: reading the age answer', () => {
   });
 });
 
+describe('real mode: what goes between browser, server and SDK', () => {
+  it('returns the complete dcRequest, including encryptionInfo, from /api/verify/start', async () => {
+    const { app } = realApp(ok({ age_over_21: true }));
+    const start = await request(app).post('/api/verify/start').expect(200);
+    expect(start.body.dcRequest).toEqual({ deviceRequest: 'device-request', encryptionInfo: 'enc' });
+  });
+
+  it('passes the JSON text of an object credential to verifyDocRequest unchanged', async () => {
+    const { app, calls } = realApp(ok({ age_over_21: true }));
+    const start = await request(app).post('/api/verify/start');
+    const jsonText = JSON.stringify({ protocol: 'org-iso-mdoc', data: { response: 'b64-response' } });
+    await request(app).post('/api/verify/confirm').send({ sessionId: start.body.sessionId, data: jsonText }).expect(200);
+    expect(calls).toEqual([{ sessionId: 'sdk-1', data: jsonText }]);
+  });
+});
+
+describe('real mode: DEV_INSPECT shows the authentication block', () => {
+  const authentication = {
+    authenticationResult: 'FAILED', issuerRecognized: false, issuerSignedAuthenticated: true, deviceSignedAuthenticated: true,
+    dataIntegrity: true, msoValidity: true, certValidationError: 'Issuer certificate not found in trust store', issuerAuthValid: false, deviceAuthValid: true,
+  };
+
+  it('prints res, cancelled and every authentication flag in full, with the portrait redacted', async () => {
+    const { app, logs } = realApp(ok({ identity: { age_over_21: true, portrait: PORTRAIT }, authentication }), { inspect: true });
+    const res = await buyReal(app);
+    expect(res.body).toMatchObject({ outcome: 'failed', reason: 'authentication_checks_failed' });
+    const line = logs.find((l) => l.startsWith('[inspect] raw verifier response'))!;
+    const head = JSON.parse(line.slice(line.indexOf('{'), line.indexOf(' resDetails=')));
+    expect(head).toEqual({ res: true, cancelled: false, authentication });
+    expect(line).toContain(`[portrait omitted, ${Buffer.byteLength(PORTRAIT)} bytes]`);
+    expect(line).not.toContain(PORTRAIT.slice(0, 20));
+  });
+
+  it('keeps the authentication block even when the rest of resDetails is long and gets cut', () => {
+    const filler = Object.fromEntries(Array.from({ length: 400 }, (_, i) => [`claim_${i}`, 'x'.repeat(20)]));
+    const line = redactForLog(ok({ documents: [{ identity: { ...filler, portrait: PORTRAIT }, authentication }] }));
+    const head = JSON.parse(line.slice(0, line.indexOf(' resDetails=')));
+    expect(head.authentication).toEqual(authentication);
+    expect(line).toContain('[truncated]');
+    expect(line).not.toContain(PORTRAIT.slice(0, 20));
+  });
+
+  it('prints cancelled: true and a null authentication for a cancelled answer', () => {
+    const line = redactForLog({ res: false, resDetails: '{}', cancelled: true });
+    expect(JSON.parse(line.slice(0, line.indexOf(' resDetails=')))).toEqual({ res: false, cancelled: true, authentication: null });
+  });
+});
+
 describe('real mode: the portrait never leaves the firewall', () => {
   it('is not stored, returned, put in the receipt, or logged (even with DEV_INSPECT on)', async () => {
     const { app, db, logs } = realApp(ok({ documents: [{ [NS]: { age_over_21: true, portrait: PORTRAIT } }] }), { inspect: true });
@@ -147,7 +195,7 @@ describe('real mode: the portrait never leaves the firewall', () => {
     for (const raw of shapes) {
       const line = redactForLog(raw);
       expect(line).not.toContain(PORTRAIT.slice(0, 20));
-      expect(line.length).toBeLessThan(4100);
+      expect(line.length).toBeLessThan(8300); // two capped parts: the header and resDetails
     }
     expect(redactForLog(ok({ portrait: [1, 2, 3, 4] }))).toContain('[portrait omitted, 4 bytes]');
   });

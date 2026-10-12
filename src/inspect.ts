@@ -1,3 +1,4 @@
+import { findClaim } from './firewall.js';
 import type { RawVerification } from './identity.js';
 
 /**
@@ -29,18 +30,35 @@ function redact(node: unknown, depth = 0): unknown {
   return out;
 }
 
+/** The authentication block(s): flags and short error strings, never personal data. */
+function authenticationOf(details: unknown): unknown {
+  const found = findClaim(details, 'authentication').map((f) => f.value).filter((v) => v && typeof v === 'object');
+  if (found.length === 0) return null;
+  return found.length === 1 ? found[0] : found;
+}
+
+/**
+ * One log line: res, cancelled and the authentication block in full (for diagnosing for example
+ * issuerRecognized: false or a certValidationError), then the rest of resDetails with every
+ * portrait redacted and the length capped.
+ */
 export function redactForLog(raw: RawVerification): string {
   let details: unknown = raw.resDetails;
+  let authentication: unknown = null;
   if (typeof raw.resDetails === 'string') {
     try {
-      details = redact(JSON.parse(raw.resDetails));
+      const parsed = JSON.parse(raw.resDetails);
+      authentication = redact(authenticationOf(parsed));
+      details = redact(parsed);
     } catch {
       // Not JSON (for example an error description). Never print an unbounded blob.
       details = raw.resDetails.length > 500 ? `[${Buffer.byteLength(raw.resDetails)} bytes of non-JSON text omitted]` : raw.resDetails;
     }
   } else {
+    authentication = redact(authenticationOf(details));
     details = redact(details);
   }
-  const text = JSON.stringify({ res: raw.res, cancelled: raw.cancelled, resDetails: details });
-  return text.length > MAX_TEXT ? `${text.slice(0, MAX_TEXT)}… [truncated]` : text;
+  const head = JSON.stringify({ res: raw.res, cancelled: raw.cancelled ?? false, authentication });
+  const rest = JSON.stringify(details) ?? '';
+  return `${head.length > MAX_TEXT ? `${head.slice(0, MAX_TEXT)}… [truncated]` : head} resDetails=${rest.length > MAX_TEXT ? `${rest.slice(0, MAX_TEXT)}… [truncated]` : rest}`;
 }

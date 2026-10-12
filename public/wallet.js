@@ -109,6 +109,8 @@ export const REAL_MESSAGES = {
   unsupported: 'Open this page in a browser on the phone that holds your wallet.',
   cancelled: 'The wallet was closed before anything was shared. Nothing was shared. Press Verify to try again.',
   timeout: 'The wallet did not answer in time. Nothing was shared. Press Verify to try again.',
+  blocked: 'The browser blocked the wallet prompt. Tap Verify again.',
+  network: 'The wallet request could not reach the network. Check your connection, then press Verify to try again.',
   empty: 'The wallet did not share an ID. Check that the Driver license credential is in your wallet, then try again.',
 };
 
@@ -143,23 +145,37 @@ export function realOutcomeMessage(reason) {
   return REAL_OUTCOMES[reason] ?? null;
 }
 
+/**
+ * What goes in the `data` of the org-iso-mdoc request. Credence's official sample
+ * (React-CloudSDK-Integration, useISO18013Flow) passes the whole dcRequest object
+ * ({deviceRequest, encryptionInfo}). For quick testing on a phone, ?dcdata=deviceRequest in the
+ * page address passes only dcRequest.deviceRequest instead.
+ */
+export function walletRequestData(dcRequest, search = globalThis.location?.search ?? '') {
+  if (!dcRequest || typeof dcRequest !== 'object' || !dcRequest.deviceRequest) {
+    throw new Error('The Cloud SDK did not return a deviceRequest. Run the readiness page and check your profile.');
+  }
+  return new URLSearchParams(search).get('dcdata') === 'deviceRequest' ? dcRequest.deviceRequest : dcRequest;
+}
+
 async function realWallet(dcRequest) {
   if (!hasDigitalCredentials()) throw new WalletProblem('unsupported');
-  // The Cloud SDK integration guide (flow A) says to pass dcRequest.deviceRequest as the request data.
-  const deviceRequest = dcRequest && typeof dcRequest === 'object' ? dcRequest.deviceRequest : undefined;
-  if (!deviceRequest) throw new Error('The Cloud SDK did not return a deviceRequest. Run the readiness page and check your profile.');
+  const data = walletRequestData(dcRequest);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REAL_WALLET_TIMEOUT_MS);
   let credential;
   try {
     credential = await navigator.credentials.get({
-      digital: { requests: [{ protocol: 'org-iso-mdoc', data: deviceRequest }] },
+      digital: { requests: [{ protocol: 'org-iso-mdoc', data }] },
       mediation: 'required',
       signal: controller.signal,
     });
   } catch (err) {
-    if (controller.signal.aborted) throw new WalletProblem('timeout');
-    if (err?.name === 'NotAllowedError' || err?.name === 'AbortError') throw new WalletProblem('cancelled');
+    if (controller.signal.aborted || err?.name === 'AbortError') throw new WalletProblem('timeout');
+    // Chrome uses NotAllowedError both for a user cancel and for a call outside a user gesture
+    // ("requires transient activation"). The second is not the user's choice, so say so.
+    if (err?.name === 'NotAllowedError') throw new WalletProblem(/transient/i.test(err.message ?? '') ? 'blocked' : 'cancelled');
+    if (err?.name === 'NetworkError') throw new WalletProblem('network');
     if (err?.name === 'NotSupportedError' || err instanceof TypeError) throw new WalletProblem('unsupported');
     throw err;
   } finally {

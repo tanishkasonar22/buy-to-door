@@ -1,6 +1,6 @@
 // The real-mode browser code in public/wallet.js, with the Digital Credentials API faked.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { REAL_MESSAGES, REAL_WALLET_TIMEOUT_MS, hasDigitalCredentials, realOutcomeMessage, requestWallet, walletError } from '../public/wallet.js';
+import { REAL_MESSAGES, REAL_WALLET_TIMEOUT_MS, hasDigitalCredentials, realOutcomeMessage, requestWallet, walletError, walletRequestData } from '../public/wallet.js';
 
 const dcRequest = { deviceRequest: 'device-request', encryptionInfo: 'enc' };
 
@@ -22,12 +22,49 @@ describe('real wallet in the browser', () => {
   beforeEach(() => vi.useRealTimers());
   afterEach(() => vi.unstubAllGlobals());
 
-  it('asks the wallet with org-iso-mdoc, the deviceRequest and mediation required', async () => {
+  it('passes the WHOLE dcRequest as data by default, as in the Credence sample', async () => {
     let seen: any;
     fakeBrowser(async (opts) => ((seen = opts), { data: 'wallet-answer' }));
     await expect(requestWallet({ mode: 'real', dcRequest, sessionId: 's' })).resolves.toBe('wallet-answer');
-    expect(seen.digital).toEqual({ requests: [{ protocol: 'org-iso-mdoc', data: 'device-request' }] });
+    expect(seen.digital).toEqual({ requests: [{ protocol: 'org-iso-mdoc', data: { deviceRequest: 'device-request', encryptionInfo: 'enc' } }] });
     expect(seen.mediation).toBe('required');
+  });
+
+  it('passes only deviceRequest when the page address has ?dcdata=deviceRequest', async () => {
+    let seen: any;
+    fakeBrowser(async (opts) => ((seen = opts), { data: 'wallet-answer' }));
+    vi.stubGlobal('location', { search: '?dcdata=deviceRequest' });
+    await requestWallet({ mode: 'real', dcRequest, sessionId: 's' });
+    expect(seen.digital.requests[0].data).toBe('device-request');
+    vi.stubGlobal('location', { search: '?dcdata=something-else' });
+    await requestWallet({ mode: 'real', dcRequest, sessionId: 's' });
+    expect(seen.digital.requests[0].data).toEqual(dcRequest);
+    expect(walletRequestData(dcRequest, '')).toBe(dcRequest);
+    expect(walletRequestData(dcRequest, '?dcdata=deviceRequest')).toBe('device-request');
+  });
+
+  it('sends credential.data as is when it is a string, and as JSON text when it is an object', async () => {
+    fakeBrowser(async () => ({ data: 'already-a-string' }));
+    await expect(requestWallet({ mode: 'real', dcRequest, sessionId: 's' })).resolves.toBe('already-a-string');
+    const object = { protocol: 'org-iso-mdoc', data: { response: 'b64-response' } };
+    fakeBrowser(async () => ({ data: object }));
+    const sent = await requestWallet({ mode: 'real', dcRequest, sessionId: 's' });
+    expect(sent).toBe(JSON.stringify(object));
+    expect(JSON.parse(sent)).toEqual(object);
+  });
+
+  it('maps browser errors to specific messages', async () => {
+    const cases: [DOMException, string][] = [
+      [new DOMException('The request requires transient activation (a user gesture).', 'NotAllowedError'), REAL_MESSAGES.blocked],
+      [new DOMException('User cancelled', 'NotAllowedError'), REAL_MESSAGES.cancelled],
+      [new DOMException('Aborted by the browser', 'AbortError'), REAL_MESSAGES.timeout],
+      [new DOMException('Offline', 'NetworkError'), REAL_MESSAGES.network],
+    ];
+    for (const [error, message] of cases) {
+      fakeBrowser(async () => { throw error; });
+      expect(await messageFor(requestWallet({ mode: 'real', dcRequest, sessionId: 's' }))).toBe(message);
+    }
+    expect(REAL_MESSAGES.blocked).toBe('The browser blocked the wallet prompt. Tap Verify again.');
   });
 
   it('says which phone to use when the Digital Credentials API is missing, without calling anything', async () => {
