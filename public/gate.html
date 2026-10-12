@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en" data-page="gate">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Gate</title>
+  <meta name="color-scheme" content="light">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <main class="page single">
+    <section class="event">
+      <div class="gate-head"><span id="gate-door-slot"></span><h1>Gate</h1></div>
+      <p class="card-help">Step 1: check the ticket. Step 2: check the person&rsquo;s age. Staff results are recorded as staff results, not as automatic checks.</p>
+
+      <form id="validate-form" class="stack">
+        <label for="code">Ticket code</label>
+        <input id="code" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Paste or type the ticket code">
+        <label for="gate-id">Gate</label>
+        <select id="gate-id"><option value="gate-a">Gate A</option><option value="gate-b">Gate B</option></select>
+        <button class="primary" type="submit">Check ticket</button>
+      </form>
+      <p id="status" class="status" role="status" aria-live="polite"></p>
+
+      <section id="step2" class="card" hidden aria-labelledby="step2-title">
+        <h2 id="step2-title">Ticket is valid. Check age.</h2>
+        <p class="card-help" id="ticket-line"></p>
+        <p class="gate-note" id="gate-note"></p>
+
+        <div id="mobile-section" class="gate-section">
+          <h3>Mobile ID</h3>
+          <label for="scenario">Test result to simulate</label>
+          <select id="scenario">
+            <option value="pass">Adult, all checks pass</option>
+            <option value="under">Under 21</option>
+            <option value="invalid">ID checks fail</option>
+            <option value="noage">No age result returned</option>
+          </select>
+          <button id="mobile-btn" class="primary" type="button">Run simulated mobile ID check</button>
+        </div>
+
+        <div class="gate-section">
+          <h3>Physical ID</h3>
+          <p class="card-help">Scan the ID with the Tap2iD Mobile app, then record what you saw.</p>
+          <div class="button-row">
+            <button id="phys-pass" class="primary" type="button">ID verified, let in</button>
+          </div>
+          <label for="fail-reason">If refusing, why?</label>
+          <select id="fail-reason">
+            <option value="under_age">Under the age limit</option>
+            <option value="id_expired">ID is expired</option>
+            <option value="id_not_authentic">ID does not look authentic</option>
+            <option value="id_unreadable">ID could not be read</option>
+          </select>
+          <button id="phys-fail" class="secondary" type="button">Refuse entry</button>
+        </div>
+
+        <div id="override-section" class="gate-section">
+          <h3>Manager override</h3>
+          <label for="override-reason">Reason</label>
+          <select id="override-reason">
+            <option value="no_mobile_id">Guest has no mobile ID</option>
+            <option value="wallet_unsupported">Wallet not supported</option>
+            <option value="device_problem">Device problem</option>
+            <option value="manager_approved">Manager approved</option>
+          </select>
+          <button id="override-btn" class="secondary" type="button">Let in with override</button>
+        </div>
+      </section>
+
+      <div id="verdict" class="verdict" hidden role="alert"></div>
+      <div id="receipt-box"></div>
+    </section>
+  </main>
+  <script type="module" src="/gate.js"></script>
+</body>
+</html>

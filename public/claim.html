@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en" data-door="closed">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Claim your ticket</title>
+  <meta name="color-scheme" content="light dark">
+  <script src="/theme-init.js"></script>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <main class="page single">
+    <div class="stage compact" id="stage" aria-hidden="true"></div>
+    <section class="event card glass">
+      <p class="event-meta" id="event-meta"></p>
+      <h1>Claim your ticket</h1>
+      <div class="promise">
+        <p class="promise-lead">A friend bought a ticket for you. Prove you are 21 or older to claim it.</p>
+        <p class="promise-body">Only a yes or no is shared. Your name, birth date and photo are not kept.</p>
+      </div>
+      <button id="verify" class="primary" type="button" disabled>Verify age with my wallet ID</button>
+      <p class="divider-or" aria-hidden="true">or</p>
+      <button id="no-wallet" class="secondary full-width" type="button" disabled>I don't have a mobile ID</button>
+      <p class="field-help" id="no-wallet-help">Not everyone has a mobile ID. You can still claim. Your age is then checked at the gate with a physical ID.</p>
+      <p id="status" class="status" role="status" aria-live="polite"></p>
+    </section>
+    <section class="outcome" aria-live="polite">
+      <div id="ticket-box"></div>
+      <div id="receipt-box"></div>
+    </section>
+  </main>
+  <script type="module" src="/claim.js"></script>
+</body>
+</html>

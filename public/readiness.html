@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Readiness</title>
+  <meta name="color-scheme" content="light dark">
+  <script src="/theme-init.js"></script>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <main class="page single">
+    <h1>Readiness</h1>
+    <p class="card-help">Checks your setup before you record. It never shows your license key or profile ID.</p>
+
+    <section class="card" aria-labelledby="checks-h">
+      <h2 id="checks-h">Setup checks</h2>
+      <div id="token-row" class="stack" hidden>
+        <label for="token">Readiness token</label>
+        <input id="token" type="password" autocomplete="off" placeholder="The READINESS_TOKEN from your .env">
+      </div>
+      <button id="run" class="primary" type="button">Run checks</button>
+      <p id="status" class="status" role="status" aria-live="polite"></p>
+      <ul id="checks" class="check-list"></ul>
+    </section>
+
+    <section class="card" aria-labelledby="browser-h">
+      <h2 id="browser-h">This browser</h2>
+      <p id="browser-line" class="card-help"></p>
+      <div class="table-wrap"><table class="data"><thead><tr><th scope="col">Flow</th><th scope="col">Status</th><th scope="col">Note</th></tr></thead><tbody id="flows"></tbody></table></div>
+      <p class="card-help" id="flow-note"></p>
+    </section>
+  </main>
+  <script type="module" src="/readiness.js"></script>
+</body>
+</html>

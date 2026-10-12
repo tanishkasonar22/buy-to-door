@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <title>Test wallet</title>
+  <script src="/theme-init.js"></script>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body class="wallet-page">
+  <main class="page single">
+    <p class="wallet-badge standalone">Simulated wallet. Test credential. Not a real ID.</p>
+    <h1>Test wallet</h1>
+    <div class="cred-card" aria-hidden="true">
+      <div class="cred-top"><span>Test credential</span><span class="cred-chip"></span></div>
+      <div>
+        <div class="cred-name">Demo mobile ID</div>
+        <div class="cred-line"><span>Not a real ID</span><span>Simulated</span></div>
+      </div>
+    </div>
+    <section class="card" id="request" hidden>
+      <p class="event-meta" id="sender"></p>
+      <h2 id="question">Are you 21 or older?</h2>
+      <p class="card-help">Only a yes or no is shared. Your name, birth date and photo are not shared.</p>
+      <form id="wallet-form">
+        <label for="scenario">Test credential to use</label>
+        <select id="scenario">
+          <option value="pass">Test adult (age 25)</option>
+          <option value="under">Test minor (age 17)</option>
+          <option value="invalid">Test card that fails security checks</option>
+          <option value="noage">Test card with no age field</option>
+        </select>
+        <div class="wallet-actions">
+          <button type="button" class="secondary" id="decline">Don't share</button>
+          <button type="button" class="primary" id="share">Share yes or no</button>
+        </div>
+      </form>
+    </section>
+    <p id="status" class="status" role="status" aria-live="polite"></p>
+  </main>
+  <script type="module" src="/wallet-app.js"></script>
+</body>
+</html>

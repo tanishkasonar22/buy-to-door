@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en" data-door="closed">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <title>Harbor Nights tickets</title>
+  <script src="/theme-init.js"></script>
+  <link rel="preload" href="/vendor/fonts/bricolage-grotesque-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <main class="page shop">
+    <div class="stage" id="stage" aria-hidden="true"></div>
+
+    <section class="event card glass" aria-labelledby="event-name">
+      <p class="event-kicker">From purchase to the door</p>
+      <p class="event-meta" id="event-meta"></p>
+      <h1 id="event-name">Harbor Nights</h1>
+      <p class="event-ticket" id="event-ticket"></p>
+
+      <div class="promise">
+        <p class="promise-lead">Prove you are 21 or older with the ID in your phone wallet.</p>
+        <p class="promise-body">The shop learns one thing: yes or no. Your name, birth date and photo are not kept.</p>
+      </div>
+
+      <div class="field">
+        <label for="quantity">Tickets in this order</label>
+        <select id="quantity"></select>
+        <p class="field-help">You verify first. Each guest then gets a link to prove their own age and claim their ticket.</p>
+      </div>
+
+      <button id="verify" class="primary" type="button" disabled>Verify age with my wallet ID</button>
+      <p class="divider-or" aria-hidden="true">or</p>
+      <button id="no-wallet" class="secondary full-width" type="button" disabled>I don't have a mobile ID</button>
+      <p class="field-help">Not everyone has a mobile ID. You can still buy. Your age is then checked at the gate with a physical ID.</p>
+      <p id="status" class="status" role="status" aria-live="polite"></p>
+      <p id="hint" class="hint" hidden></p>
+      <p class="fineprint" id="event-note"></p>
+    </section>
+
+    <section class="outcome" id="outcome" aria-live="polite">
+      <div id="ticket-box"></div>
+      <div id="order-box"></div>
+      <div id="receipt-box"></div>
+    </section>
+  </main>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

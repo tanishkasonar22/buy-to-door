@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Your order</title>
+  <meta name="color-scheme" content="light dark">
+  <script src="/theme-init.js"></script>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <main class="page single">
+    <section class="event card">
+      <p class="event-meta" id="order-id"></p>
+      <h1>Your order</h1>
+      <p class="card-help">You see only whether each ticket is claimed. You never see why a guest&rsquo;s check failed.</p>
+      <p id="status" class="status" role="status" aria-live="polite"></p>
+      <div id="tickets-skeleton" aria-hidden="true"><span class="skeleton" style="height:44px;margin-bottom:8px"></span><span class="skeleton" style="height:44px;margin-bottom:8px"></span><span class="skeleton" style="height:44px"></span></div>
+      <div class="table-wrap">
+      <table class="data" id="tickets" hidden>
+        <caption class="visually-hidden">Tickets in this order</caption>
+        <thead><tr><th scope="col">Ticket</th><th scope="col">Status</th><th scope="col">Link</th></tr></thead>
+        <tbody></tbody>
+      </table>
+      </div>
+    </section>
+  </main>
+  <script type="module" src="/order.js"></script>
+</body>
+</html>

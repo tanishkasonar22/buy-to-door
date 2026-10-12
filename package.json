@@ -1,0 +1,33 @@
+{
+  "name": "buy-to-door",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "description": "Age-verified ticketing built on the Credence ID Cloud SDK",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "tsx src/server.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "seed": "tsx scripts/seed.ts"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.5.0",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.1",
+    "qrcode": "^1.5.4"
+  },
+  "devDependencies": {
+    "@fontsource-variable/bricolage-grotesque": "5.2.8",
+    "@types/better-sqlite3": "^7.6.11",
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.16.0",
+    "@types/qrcode": "^1.5.6",
+    "@types/supertest": "^6.0.2",
+    "supertest": "^7.0.0",
+    "three": "0.180.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
+}

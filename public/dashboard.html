@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <title>Operations dashboard</title>
+  <script src="/theme-init.js"></script>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <main class="page wide">
+    <div class="dash-head">
+      <div>
+        <h1>Operations dashboard</h1>
+        <p class="card-help">Updates every few seconds. Simulated and staff-recorded checks are labelled so they are not mistaken for automatic ones.</p>
+      </div>
+      <p class="live-pulse" id="live-pulse" data-state="idle"><span class="live-dot" id="live-dot" aria-hidden="true"></span><span id="live-text">Connecting…</span></p>
+    </div>
+    <p id="status" class="status" role="status" aria-live="polite"></p>
+
+    <section class="sdk-proof" aria-labelledby="sdk-h">
+      <div class="sdk-proof-head">
+        <h2 id="sdk-h">Credence ID Cloud SDK</h2>
+        <span class="sdk-mode" id="sdk-mode"></span>
+      </div>
+      <p class="card-help" id="sdk-note"></p>
+      <dl class="stats" id="sdk"></dl>
+    </section>
+
+    <section aria-labelledby="funnel-h"><h2 id="funnel-h">Funnel</h2><dl class="stats" id="funnel"></dl></section>
+
+    <div class="dash-grid two" style="margin-top: var(--space-5)">
+      <figure class="chart-card" style="margin:0">
+        <h3 id="funnel-chart-h">From wallet prompt to the door</h3>
+        <svg class="chart" id="funnel-chart" role="img" aria-labelledby="funnel-chart-h funnel-chart-desc" viewBox="0 0 420 200"></svg>
+        <figcaption class="visually-hidden" id="funnel-chart-desc"></figcaption>
+      </figure>
+      <figure class="chart-card" style="margin:0">
+        <h3 id="spark-h">Activity this session</h3>
+        <svg class="chart" id="spark-chart" role="img" aria-labelledby="spark-h spark-desc" viewBox="0 0 420 120"></svg>
+        <figcaption class="chart-legend"><span>Wallet prompts and no-ID orders, sampled every refresh</span></figcaption>
+        <p class="visually-hidden" id="spark-desc"></p>
+      </figure>
+    </div>
+
+    <div class="dash-grid two">
+      <section aria-labelledby="methods-h"><h2 id="methods-h">Entry methods</h2>
+        <div class="table-wrap"><table class="data"><thead><tr><th scope="col">Method</th><th scope="col">Pass</th><th scope="col">Fail</th><th scope="col">Median</th><th scope="col">Slowest 5%</th></tr></thead><tbody id="methods"><tr><td colspan="5"><span class="skeleton"></span></td></tr></tbody></table></div>
+        <figure class="chart-card" style="margin: var(--space-3) 0 0">
+          <h3 id="times-h">Scan times</h3>
+          <svg class="chart" id="times-chart" role="img" aria-labelledby="times-h times-desc" viewBox="0 0 420 60"></svg>
+          <figcaption class="chart-legend"><span>Median</span><span class="alt">Slowest 5%</span></figcaption>
+          <p class="visually-hidden" id="times-desc"></p>
+        </figure>
+      </section>
+      <section aria-labelledby="fail-h"><h2 id="fail-h">Why checks failed</h2>
+        <div class="table-wrap"><table class="data"><thead><tr><th scope="col">Reason</th><th scope="col">Count</th></tr></thead><tbody id="failures"><tr><td colspan="2"><span class="skeleton"></span></td></tr></tbody></table></div>
+      </section>
+    </div>
+
+    <section aria-labelledby="recent-h"><h2 id="recent-h">Recent scans</h2>
+      <div class="table-wrap"><table class="data"><thead><tr><th scope="col">Time</th><th scope="col">Ticket</th><th scope="col">Gate</th><th scope="col">Method</th><th scope="col">Result</th><th scope="col">Reason</th></tr></thead><tbody id="recent"><tr><td colspan="6"><span class="skeleton"></span></td></tr></tbody></table></div>
+    </section>
+    <section aria-labelledby="priv-h"><h2 id="priv-h">Privacy</h2>
+      <dl class="stats" id="privacy"></dl>
+      <p class="card-help" id="privacy-note"></p>
+    </section>
+    <section class="card" aria-labelledby="audit-h" style="margin-top: var(--space-6)"><h2 id="audit-h">Audit export</h2>
+      <p class="card-help">A CSV of orders, tickets, claims and gate scans. It holds ticket IDs, times, methods and results. It has no names, birth dates or photos.</p>
+      <a class="button-link" href="/api/export/audit.csv" download><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 3v12m0 0l-5-5m5 5l5-5M4 19h16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>Download audit CSV</a>
+    </section>
+    <button id="reset" class="secondary" type="button" hidden>Reset demo data</button>
+  </main>
+  <script type="module" src="/dashboard.js"></script>
+</body>
+</html>
