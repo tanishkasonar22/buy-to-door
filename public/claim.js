@@ -3,7 +3,7 @@ import { label } from './labels.js';
 import { renderNoData, renderReceipt, renderTicket } from './render.js';
 import { mountStage, openInSteps, setDoor } from './door.js';
 import { initShell, setJourney } from './shell.js';
-import { requestWallet, walletError } from './wallet.js';
+import { realOutcomeMessage, requestWallet, walletError } from './wallet.js';
 
 const $ = (id) => document.getElementById(id);
 const verifyBtn = $('verify');
@@ -56,7 +56,8 @@ async function claim() {
       hideButtons();
       return;
     }
-    setStatus(`${label(result.reason)}. The ticket was not claimed. You can try again.`, 'error');
+    const realMessage = mode === 'real' && realOutcomeMessage(result.reason);
+    setStatus(realMessage ? realMessage.replace('No ticket was issued.', 'The ticket was not claimed.') : `${label(result.reason)}. The ticket was not claimed. You can try again.`, 'error');
     setJourney({ buy: 'done', verify: 'blocked' });
     setDoor('locked', `Locked: ${label(result.reason).toLowerCase()}`);
   } catch (err) {

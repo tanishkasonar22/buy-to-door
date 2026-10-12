@@ -8,7 +8,8 @@ export const config = {
   profileId: process.env.CLOUDSDK_PROFILE_ID ?? '',
   origin: process.env.CLOUDSDK_ORIGIN ?? '',
   ticketSecret: process.env.TICKET_SIGNING_SECRET ?? '',
-  ageClaimKey: process.env.AGE_CLAIM_KEY ?? 'age_over_21',
+  // Unset or blank means age_over_21. The mock verifier and the firewall both read this one value.
+  ageClaimKey: process.env.AGE_CLAIM_KEY?.trim() || 'age_over_21',
   inspect: process.env.DEV_INSPECT === '1',
   dbPath: process.env.DB_PATH ?? 'data/buy-to-door.db',
   claimTtlHours: Number(process.env.CLAIM_TTL_HOURS ?? 48),

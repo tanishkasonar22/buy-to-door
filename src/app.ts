@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { type Db } from './db.js';
 import { buildAuditCsv } from './audit.js';
 import { applyFirewall } from './firewall.js';
+import { redactForLog } from './inspect.js';
 import type { IdentityVerifier } from './identity.js';
 import { buildMetrics, privacySummary } from './metrics.js';
 import { runReadiness, type ReadinessClient } from './readiness.js';
@@ -234,6 +235,7 @@ export function createApp(deps: AppDeps) {
       walletReplies.delete(sessionId);
 
       const raw = await verifier.verify(sessionId, answer);
+      if (deps.inspect) log('[inspect] raw verifier response (portrait redacted):', redactForLog(raw));
       const fw = applyFirewall(raw, ageClaimKey); // the only code that reads the raw response
       if (deps.inspect) log('[inspect] field names returned by the verifier:', fw.receivedFieldNames);
       step(sessionId, fw.outcome === 'passed' ? 'verified' : 'not_verified', fw.reason);
@@ -346,6 +348,7 @@ export function createApp(deps: AppDeps) {
       walletReplies.delete(sessionId);
 
       const raw = await verifier.verify(sessionId, answer);
+      if (deps.inspect) log('[inspect] raw verifier response (portrait redacted):', redactForLog(raw));
       const fw = applyFirewall(raw, ageClaimKey);
       if (deps.inspect) log('[inspect] field names returned by the verifier:', fw.receivedFieldNames);
       const verificationRef = randomUUID();

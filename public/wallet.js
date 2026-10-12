@@ -99,18 +99,73 @@ function quickSimulatedWallet(host) {
   });
 }
 
-async function realWallet(dcRequest) {
-  if (!navigator.credentials || !navigator.credentials.get) {
-    throw new Error('This browser cannot read wallet IDs. Use Safari on iOS 17.4 or later.');
+// ---- Real mode only -------------------------------------------------------------------------
+
+/** How long the real wallet prompt may stay open before we stop waiting. */
+export const REAL_WALLET_TIMEOUT_MS = 2 * 60_000;
+
+/** Calm, specific messages for the real wallet. Hybrid and mock never use these. */
+export const REAL_MESSAGES = {
+  unsupported: 'Open this page in a browser on the phone that holds your wallet.',
+  cancelled: 'The wallet was closed before anything was shared. Nothing was shared. Press Verify to try again.',
+  timeout: 'The wallet did not answer in time. Nothing was shared. Press Verify to try again.',
+  empty: 'The wallet did not share an ID. Check that the Driver license credential is in your wallet, then try again.',
+};
+
+const REAL_OUTCOMES = {
+  under_age: 'Your wallet says you are not 21 or older. No ticket was issued.',
+  age_claim_missing: 'Your wallet did not share an age answer. No ticket was issued. Check that the Driver license credential is in your wallet, then try again.',
+  verification_failed: 'The ID could not be verified. No ticket was issued. You can try again, or buy without a mobile ID.',
+  authentication_checks_failed: 'The ID did not pass a security check. No ticket was issued.',
+  unreadable_response: 'The wallet answer could not be read. No ticket was issued. Try again.',
+  wallet_cancelled: 'The wallet request was cancelled. Nothing was shared.',
+};
+
+/** A problem with the real wallet prompt that has its own message. */
+class WalletProblem extends Error {
+  constructor(kind) {
+    super(REAL_MESSAGES[kind]);
+    this.name = 'WalletProblem';
+    this.kind = kind;
   }
+}
+
+/**
+ * True only when the browser has the Digital Credentials API. navigator.credentials alone is not
+ * enough: it exists in every modern browser for passkeys.
+ */
+export function hasDigitalCredentials(win = globalThis) {
+  return typeof win.DigitalCredential !== 'undefined' && typeof win.navigator?.credentials?.get === 'function';
+}
+
+/** Message for a real-mode result that did not pass, or null to keep the default wording. */
+export function realOutcomeMessage(reason) {
+  return REAL_OUTCOMES[reason] ?? null;
+}
+
+async function realWallet(dcRequest) {
+  if (!hasDigitalCredentials()) throw new WalletProblem('unsupported');
   // The Cloud SDK integration guide (flow A) says to pass dcRequest.deviceRequest as the request data.
   const deviceRequest = dcRequest && typeof dcRequest === 'object' ? dcRequest.deviceRequest : undefined;
   if (!deviceRequest) throw new Error('The Cloud SDK did not return a deviceRequest. Run the readiness page and check your profile.');
-  const credential = await navigator.credentials.get({
-    digital: { requests: [{ protocol: 'org-iso-mdoc', data: deviceRequest }] },
-    mediation: 'required',
-  });
-  if (!credential) throw new Error('The wallet did not return an ID.');
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REAL_WALLET_TIMEOUT_MS);
+  let credential;
+  try {
+    credential = await navigator.credentials.get({
+      digital: { requests: [{ protocol: 'org-iso-mdoc', data: deviceRequest }] },
+      mediation: 'required',
+      signal: controller.signal,
+    });
+  } catch (err) {
+    if (controller.signal.aborted) throw new WalletProblem('timeout');
+    if (err?.name === 'NotAllowedError' || err?.name === 'AbortError') throw new WalletProblem('cancelled');
+    if (err?.name === 'NotSupportedError' || err instanceof TypeError) throw new WalletProblem('unsupported');
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+  if (!credential) throw new WalletProblem('empty');
   return typeof credential.data === 'string' ? credential.data : JSON.stringify(credential.data);
 }
 
@@ -229,6 +284,7 @@ export function requestWallet({ mode, dcRequest, sessionId }) {
 }
 
 export function walletError(err) {
+  if (err instanceof WalletProblem) return err.message; // real mode only
   if (err instanceof DOMException) {
     if (err.name === 'NotAllowedError') return 'The wallet prompt was cancelled or blocked. Try again.';
     if (err.name === 'AbortError') return 'The wallet request timed out. Try again.';

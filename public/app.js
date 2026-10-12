@@ -4,7 +4,7 @@ import { label } from './labels.js';
 import { copyText, el, renderNoData, renderReceipt, renderTicket } from './render.js';
 import { mountStage, openInSteps, setDoor } from './door.js';
 import { initShell, setJourney } from './shell.js';
-import { requestWallet, walletError } from './wallet.js';
+import { hasDigitalCredentials, realOutcomeMessage, requestWallet, walletError } from './wallet.js';
 
 const $ = (id) => document.getElementById(id);
 const verifyBtn = $('verify');
@@ -81,7 +81,7 @@ async function verify() {
       setJourney({ buy: 'done', verify: 'done', ticket: 'done', door: 'current' });
       openInSteps('open');
     } else {
-      setStatus(`${label(result.reason)}. No ticket was issued.`, 'error');
+      setStatus((mode === 'real' && realOutcomeMessage(result.reason)) || `${label(result.reason)}. No ticket was issued.`, 'error');
       setJourney({ buy: 'done', verify: 'blocked' });
       setDoor('locked', `Locked: ${label(result.reason).toLowerCase()}`);
     }
@@ -126,11 +126,16 @@ async function init() {
   for (let i = 1; i <= config.maxQuantity; i++) qty.append(el('option', { value: String(i), text: i === 1 ? '1 ticket (just me)' : `${i} tickets (me and ${i - 1} guest${i > 2 ? 's' : ''})` }));
 
   if (mode === 'real') {
+    // Feature detection decides, not the user agent: flow A (org-iso-mdoc over the Digital
+    // Credentials API) also works on Android, for example with the Multipaz Wallet in Chrome.
     const a = detectFlows(navigator.userAgent).flows.find((f) => f.id === 'A');
-    if (a.status !== 'supported') {
-      const hint = $('hint');
+    const hint = $('hint');
+    if (!hasDigitalCredentials()) {
       hint.hidden = false;
-      hint.textContent = `This checkout uses the Apple Wallet flow. ${a.reason}`;
+      hint.textContent = 'This browser cannot ask a wallet for an ID. Open this page in a browser on the phone that holds your wallet.';
+    } else if (a.status === 'needs_flag') {
+      hint.hidden = false;
+      hint.textContent = a.reason;
     }
     verifyBtn.addEventListener('pointerdown', prefetchStart);
   }
