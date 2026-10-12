@@ -2,10 +2,37 @@
 // The license key and tokens stay on the server. The browser never sees them.
 
 export class CloudSdkError extends Error {
-  constructor(message: string, public status: number, public code?: string) {
+  /**
+   * `upstreamBody` is the Cloud SDK's own error response, whitespace collapsed and cut to 500
+   * characters, for the server log only. It is never sent to a browser or put in `message`.
+   */
+  constructor(message: string, public status: number, public code?: string, public upstreamBody?: string) {
     super(message);
     this.name = 'CloudSdkError';
   }
+}
+
+const UPSTREAM_BODY_MAX = 500;
+const bodyExcerpt = (text: string) => {
+  const flat = text.replace(/\s+/g, ' ').trim();
+  return flat.length > UPSTREAM_BODY_MAX ? `${flat.slice(0, UPSTREAM_BODY_MAX)}…` : flat;
+};
+
+/** Scheme + host (and port if any) of a URL, or null if it is not a valid URL. */
+export function schemeAndHost(value: string | undefined | null): string | null {
+  if (!value) return null;
+  try {
+    const u = new URL(value);
+    return `${u.protocol}//${u.host}`;
+  } catch {
+    return null;
+  }
+}
+
+/** An origin as scheme + host, for logs. Paths, queries and anything else are dropped. */
+export function originForLog(value: string | undefined | null): string {
+  if (!value) return '(none)';
+  return schemeAndHost(value) ?? '(not a valid URL)';
 }
 
 /** Pull out only a short UPPER_SNAKE error code such as DOMAIN_MISMATCH. Nothing else from the body. */
@@ -23,8 +50,15 @@ export interface CloudSdkOptions {
   baseUrl: string;
   licenseKey: string;
   profileId: string;
-  /** Must match the HTTPS domain registered with the license. Sent on /v1/setup. */
+  /** Must match the HTTPS domain registered with the license. Sent on /v1/setup and /v1/refresh. */
   origin: string;
+  /** Optional: one line per call saying which Origin header was sent (scheme + host only). */
+  log?: (line: string) => void;
+  /**
+   * Real mode: also send Origin (scheme + host of `origin`) on the token calls, getDocRequest and
+   * verifyDocRequest, as a browser caller would. Off by default, so hybrid is unchanged.
+   */
+  originOnAllCalls?: boolean;
 }
 
 interface Tokens {
@@ -47,8 +81,12 @@ export class CloudSdkClient {
 
   private async post(path: string, body: object, token?: string): Promise<any> {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (token) headers.Authorization = `Bearer ${token}`;
-    else if (this.opts.origin) headers.Origin = this.opts.origin;
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+      const origin = this.opts.originOnAllCalls ? schemeAndHost(this.opts.origin) : null;
+      if (origin) headers.Origin = origin;
+    } else if (this.opts.origin) headers.Origin = this.opts.origin;
+    this.opts.log?.(`[cloudsdk] ${path} Origin header sent: ${headers.Origin ? originForLog(headers.Origin) : '(none sent)'}`);
 
     const res = await this.fetchFn(this.opts.baseUrl + path, {
       method: 'POST',
@@ -57,8 +95,8 @@ export class CloudSdkClient {
     });
     const text = await res.text();
     if (!res.ok) {
-      // Status only. Response bodies are not echoed into errors or logs.
-      throw new CloudSdkError(`Cloud SDK ${path} returned HTTP ${res.status}`, res.status, safeCode(text));
+      // The message stays status-only. The upstream error body is kept separately, for the server log.
+      throw new CloudSdkError(`Cloud SDK ${path} returned HTTP ${res.status}`, res.status, safeCode(text), bodyExcerpt(text));
     }
     try {
       return JSON.parse(text);

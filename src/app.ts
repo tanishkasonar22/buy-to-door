@@ -4,9 +4,12 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { type Db } from './db.js';
 import { buildAuditCsv } from './audit.js';
-import { applyFirewall } from './firewall.js';
+import { CloudSdkError, originForLog } from './cloudsdk.js';
+import { ageClaimDiagnostics, applyFirewall, authDiagnostics } from './firewall.js';
 import { redactForLog } from './inspect.js';
-import type { IdentityVerifier } from './identity.js';
+import { narrowMdlToAgeOver21 } from './narrowRequest.js';
+import { stripReaderAuthAll } from './stripReaderAuth.js';
+import type { IdentityVerifier, RawVerification } from './identity.js';
 import { buildMetrics, privacySummary } from './metrics.js';
 import { runReadiness, type ReadinessClient } from './readiness.js';
 import { buildReceipt, loadReceipt, saveReceipt, type ReceiptSource } from './receipt.js';
@@ -43,6 +46,12 @@ export interface AppDeps {
   log?: (...args: unknown[]) => void;
   claimTtlHours?: number;
   readinessToken?: string;
+  /** Real mode only: remove readerAuthAll from the deviceRequest sent to the browser. Default true. */
+  stripReaderAuth?: boolean;
+  /** Real mode only (demo workaround): narrow the mDL request to age_over_21. Default true. */
+  narrowRequest?: boolean;
+  /** Real mode only (DEMO ONLY): accept an issuer missing from the trust list if all else passes. Default false. */
+  demoAcceptUnlistedIssuer?: boolean;
   cloud?: { licenseKey: string; profileId: string; origin: string; baseUrl?: string; client?: ReadinessClient };
 }
 
@@ -97,6 +106,68 @@ export function createApp(deps: AppDeps) {
     if (mode === 'real' || data !== 'wallet') return data;
     const reply = walletReplies.get(sessionId);
     return reply?.status === 'shared' && reply.data ? reply.data : null;
+  };
+
+  /**
+   * The dcRequest as the browser should receive it. In real mode (unless switched off) the
+   * top-level readerAuthAll entry is removed from deviceRequest: the wallet rejects Credence's
+   * reader certificate chain (subject/issuer name encoding mismatch) before reading the request.
+   * encryptionInfo and every other byte are left as they are. Hybrid and mock are never touched.
+   */
+  const dcRequestForBrowser = (dcRequest: unknown): unknown => {
+    if (mode !== 'real') return dcRequest;
+    const deviceRequest = (dcRequest as { deviceRequest?: unknown } | null)?.deviceRequest;
+    if (typeof deviceRequest !== 'string') return dcRequest;
+    let value = deviceRequest;
+    if (deps.stripReaderAuth !== false) {
+      try {
+        const stripped = stripReaderAuthAll(value);
+        if (stripped.removed) {
+          value = stripped.value;
+          log('[dc] removed readerAuthAll (verifier reader chain rejected by wallet)');
+        }
+      } catch {
+        log('[dc] deviceRequest could not be parsed as CBOR; sent unchanged');
+        return dcRequest;
+      }
+    }
+    // DEMO WORKAROUND: the locked profile asks for more than the shop uses; ask for age_over_21 only.
+    if (deps.narrowRequest !== false) {
+      try {
+        const narrowed = narrowMdlToAgeOver21(value);
+        if (narrowed.changed) {
+          value = narrowed.value;
+          log('[dc] mDL request narrowed to age_over_21 (profile asks for more)');
+        }
+      } catch {
+        log('[dc] mDL request could not be narrowed; sent as it was');
+      }
+    }
+    return value === deviceRequest ? dcRequest : { ...(dcRequest as object), deviceRequest: value };
+  };
+
+  /**
+   * Every wallet answer goes through here, in this order: the DEV_INSPECT line (personal data
+   * redacted, authentication flags in full), the firewall, and in real mode one decision line with
+   * the reason code only. Nothing can skip the inspect line, whatever the firewall decides.
+   */
+  const decide = (raw: RawVerification) => {
+    if (deps.inspect) log('[inspect] raw verifier response (personal data redacted):', redactForLog(raw));
+    const acceptUnlistedIssuer = mode === 'real' && deps.demoAcceptUnlistedIssuer === true; // DEMO ONLY
+    const fw = applyFirewall(raw, ageClaimKey, { acceptUnlistedIssuer }); // the only code that reads the raw response
+    if (deps.inspect) log('[inspect] field names returned by the verifier:', fw.receivedFieldNames);
+    if (fw.issuerTrust === 'demo-unlisted') log('[firewall] WARNING demo override: issuer not on trust list');
+    if (mode === 'real') {
+      // For a failed security check, also say which check failed (flags and the certificate error only).
+      // For a failed security check, say which check failed; for an unusable age claim, its type and
+      // place. Flags, types, paths and string categories only: never a claim value.
+      const why =
+        fw.reason === 'authentication_checks_failed' ? ` ${authDiagnostics(raw)}`
+          : fw.reason === 'unreadable_response' || fw.reason === 'age_claim_missing' ? ` ${ageClaimDiagnostics(raw, ageClaimKey)}`
+            : '';
+      log(`[firewall] decision=${fw.outcome === 'passed' ? 'allow' : 'deny'} reason=${fw.reason}${why}`);
+    }
+    return fw;
   };
 
   const noWalletAnswer = (res: Response) =>
@@ -211,7 +282,7 @@ export function createApp(deps: AppDeps) {
       const { sessionId, dcRequest } = await verifier.start();
       sessions.set(sessionId, { createdAt: Date.now(), purpose: 'checkout' });
       step(sessionId, 'wallet_prompted');
-      res.json({ sessionId, dcRequest });
+      res.json({ sessionId, dcRequest: dcRequestForBrowser(dcRequest) });
     } catch (e) {
       next(e);
     }
@@ -219,6 +290,13 @@ export function createApp(deps: AppDeps) {
 
   app.post('/api/verify/confirm', async (req, res, next) => {
     try {
+      if (mode === 'real') {
+        // Diagnostics: does the browser's origin match the Origin the server gives the Cloud SDK?
+        const browser = req.get('origin');
+        const sdk = deps.cloud?.origin;
+        const match = !!browser && !!sdk && originForLog(browser) === originForLog(sdk);
+        log(`[origin] confirm: browser Origin ${browser ? originForLog(browser) : '(none sent)'}, Cloud SDK Origin ${originForLog(sdk)}, match=${match}`);
+      }
       const { sessionId, data } = req.body ?? {};
       const quantity = parseQuantity(req.body?.quantity);
       if (typeof sessionId !== 'string' || typeof data !== 'string' || !data) {
@@ -234,10 +312,7 @@ export function createApp(deps: AppDeps) {
       }
       walletReplies.delete(sessionId);
 
-      const raw = await verifier.verify(sessionId, answer);
-      if (deps.inspect) log('[inspect] raw verifier response (portrait redacted):', redactForLog(raw));
-      const fw = applyFirewall(raw, ageClaimKey); // the only code that reads the raw response
-      if (deps.inspect) log('[inspect] field names returned by the verifier:', fw.receivedFieldNames);
+      const fw = decide(await verifier.verify(sessionId, answer));
       step(sessionId, fw.outcome === 'passed' ? 'verified' : 'not_verified', fw.reason);
 
       const verificationRef = randomUUID();
@@ -323,7 +398,7 @@ export function createApp(deps: AppDeps) {
       const { sessionId, dcRequest } = await verifier.start();
       sessions.set(sessionId, { createdAt: Date.now(), purpose: 'claim', ticketId: row.id });
       step(sessionId, 'claim_started');
-      res.json({ sessionId, dcRequest });
+      res.json({ sessionId, dcRequest: dcRequestForBrowser(dcRequest) });
     } catch (e) {
       next(e);
     }
@@ -347,10 +422,7 @@ export function createApp(deps: AppDeps) {
       }
       walletReplies.delete(sessionId);
 
-      const raw = await verifier.verify(sessionId, answer);
-      if (deps.inspect) log('[inspect] raw verifier response (portrait redacted):', redactForLog(raw));
-      const fw = applyFirewall(raw, ageClaimKey);
-      if (deps.inspect) log('[inspect] field names returned by the verifier:', fw.receivedFieldNames);
+      const fw = decide(await verifier.verify(sessionId, answer));
       const verificationRef = randomUUID();
 
       if (fw.outcome !== 'passed') {
@@ -610,7 +682,9 @@ export function createApp(deps: AppDeps) {
   });
 
   app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
-    log('[error]', err.name, err.message); // message only, never request bodies
+    // Message only, never request bodies. For a Cloud SDK error, also its own (truncated) error response.
+    const upstream = err instanceof CloudSdkError && err.upstreamBody ? [`upstream body: ${err.upstreamBody}`] : [];
+    log('[error]', err.name, err.message, ...upstream);
     res.status(502).json({
       error: 'verifier_unavailable',
       message: 'The identity service could not complete the request. Try again.',

@@ -39,6 +39,17 @@ export function buildAuditRows(db: Db): AuditRow[] {
     if (t.claimed_at) rows.push({ time: t.claimed_at, event: 'ticket_claimed', ...base });
   }
 
+  // DEMO override: every verification accepted from an issuer that is not on the trust list.
+  const overridden = db
+    .prepare(
+      `select r.created_at, r.ticket_id, t.order_id, r.issuer_trust
+       from privacy_receipts r left join tickets t on t.id = r.ticket_id where r.issuer_trust is not null`,
+    )
+    .all() as any[];
+  for (const r of overridden) {
+    rows.push({ time: r.created_at, event: 'issuer_trust', ticket_id: r.ticket_id, order_id: r.order_id, reason: `issuerTrust=${r.issuer_trust}` });
+  }
+
   const scans = db
     .prepare(
       `select s.ticket_id, t.order_id, s.gate_id, s.method, s.result, s.reason, s.duration_ms, s.simulated, s.staff_recorded, s.ts

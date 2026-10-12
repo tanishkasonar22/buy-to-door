@@ -2,9 +2,11 @@ import { findClaim } from './firewall.js';
 import type { RawVerification } from './identity.js';
 
 /**
- * DEV_INSPECT only: the raw verifier response, made safe to print. Every portrait is replaced with
- * "[portrait omitted, N bytes]", whether it is a `portrait` key at any depth or an
- * elementIdentifier/elementValue pair. Other values are printed as received.
+ * DEV_INSPECT only: the raw verifier response, made safe to print. The structure and every key name
+ * are kept, so you can see where the age claim sits. Values are not: a portrait becomes
+ * "[portrait omitted, N bytes]", and every other string or number becomes "[redacted string, N chars]"
+ * or "[redacted number]". Only true/false and null are printed as they are, because a yes/no answer
+ * is what the firewall decides on. The authentication block is printed separately, in full.
  */
 const MAX_DEPTH = 12;
 const MAX_TEXT = 4000;
@@ -20,7 +22,9 @@ const isPortrait = (k: string) => k.toLowerCase() === 'portrait';
 function redact(node: unknown, depth = 0): unknown {
   if (depth > MAX_DEPTH) return '[nested too deep]';
   if (Array.isArray(node)) return node.map((x) => redact(x, depth + 1));
-  if (!node || typeof node !== 'object') return node;
+  if (typeof node === 'string') return `[redacted string, ${node.length} chars]`;
+  if (typeof node === 'number' || typeof node === 'bigint') return '[redacted number]';
+  if (!node || typeof node !== 'object') return node; // booleans, null, undefined
   const obj = node as Record<string, unknown>;
   const isPortraitPair = typeof obj.elementIdentifier === 'string' && isPortrait(obj.elementIdentifier) && 'elementValue' in obj;
   const out: Record<string, unknown> = {};
@@ -48,14 +52,14 @@ export function redactForLog(raw: RawVerification): string {
   if (typeof raw.resDetails === 'string') {
     try {
       const parsed = JSON.parse(raw.resDetails);
-      authentication = redact(authenticationOf(parsed));
+      authentication = authenticationOf(parsed); // flags and short error strings: printed in full
       details = redact(parsed);
     } catch {
       // Not JSON (for example an error description). Never print an unbounded blob.
       details = raw.resDetails.length > 500 ? `[${Buffer.byteLength(raw.resDetails)} bytes of non-JSON text omitted]` : raw.resDetails;
     }
   } else {
-    authentication = redact(authenticationOf(details));
+    authentication = authenticationOf(details);
     details = redact(details);
   }
   const head = JSON.stringify({ res: raw.res, cancelled: raw.cancelled ?? false, authentication });

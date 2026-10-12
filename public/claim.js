@@ -4,6 +4,7 @@ import { renderNoData, renderReceipt, renderTicket } from './render.js';
 import { mountStage, openInSteps, setDoor } from './door.js';
 import { initShell, setJourney } from './shell.js';
 import { realOutcomeMessage, requestWallet, walletError } from './wallet.js';
+import { markConfirm, newTrace, reportRealFailure } from './wallet-debug.js';
 
 const $ = (id) => document.getElementById(id);
 const verifyBtn = $('verify');
@@ -39,14 +40,15 @@ const hideButtons = () => {
 };
 
 async function claim() {
+  const trace = mode === 'real' ? newTrace() : undefined; // real-mode debug only
   setBusy(true);
   setStatus('Waiting for your wallet…');
   setDoor('closed');
   try {
     const { sessionId, dcRequest } = await takeStart();
-    const data = await requestWallet({ mode, dcRequest, sessionId });
+    const data = await requestWallet({ mode, dcRequest, sessionId, trace });
     setStatus('Checking your ID…');
-    const result = await api(`/api/claims/${encodeURIComponent(token)}/confirm`, { sessionId, data });
+    const result = await api(`/api/claims/${encodeURIComponent(token)}/confirm`, { sessionId, data }, {}, markConfirm(trace));
     renderTicket($('ticket-box'), result.ticket);
     renderReceipt($('receipt-box'), result.receipt);
     if (result.outcome === 'passed') {
@@ -58,10 +60,12 @@ async function claim() {
     }
     const realMessage = mode === 'real' && realOutcomeMessage(result.reason);
     setStatus(realMessage ? realMessage.replace('No ticket was issued.', 'The ticket was not claimed.') : `${label(result.reason)}. The ticket was not claimed. You can try again.`, 'error');
+    if (trace) reportRealFailure(null, trace, { result, statusEl });
     setJourney({ buy: 'done', verify: 'blocked' });
     setDoor('locked', `Locked: ${label(result.reason).toLowerCase()}`);
   } catch (err) {
-    setStatus(err.status === 409 || err.status === 404 ? err.message : walletError(err), 'error');
+    setStatus(err.status === 409 || err.status === 404 ? err.message : walletError(err, mode), 'error');
+    if (trace) reportRealFailure(err, trace, { statusEl });
     if (err.body?.receipt) renderReceipt($('receipt-box'), err.body.receipt);
     if (err.status === 404 || err.status === 409) hideButtons();
   } finally {

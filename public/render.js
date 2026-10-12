@@ -59,6 +59,8 @@ export function renderReceipt(container, receipt) {
       { class: 'receipt', 'aria-labelledby': 'receipt-title' },
       el('h2', { id: 'receipt-title', text: 'Privacy receipt' }),
       el('p', { class: 'receipt-id', text: `${receipt.id}  ${new Date(receipt.createdAt).toLocaleString()}` }),
+      // DEMO override only: the issuer of this ID is not on the trust list.
+      ...(receipt.issuerTrust === 'demo-unlisted' ? [el('p', { class: 'receipt-warning', text: 'Issuer not on the trust list (demo setting)' })] : []),
       el(
         'dl',
         {},

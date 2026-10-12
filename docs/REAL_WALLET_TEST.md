@@ -40,11 +40,16 @@ The code has only been tested against fake SDK responses (see "What could not be
    - [ ] Status: "Age confirmed. Your ticket is ready." The ticket and its QR code appear.
    - [ ] Privacy receipt: "What we kept" lists `age_verified`, `verified_at` and `verification_ref`.
          "Received, then discarded" lists `portrait`.
-9. Expected in the server terminal (because `DEV_INSPECT=1`):
-   - [ ] A line starting `[inspect] raw verifier response (portrait redacted):`. The portrait appears only as
-         `[portrait omitted, N bytes]`. **Note where `age_over_21` sits in this output** and send it to me if
-         the result was not "Age confirmed".
+9. Expected in the server terminal:
+   - [ ] Always, in real mode: one line with the verdict and its reason code, for example
+         `[firewall] decision=allow reason=age_confirmed` or `[firewall] decision=deny reason=authentication_checks_failed`.
+   - [ ] Because `DEV_INSPECT=1`, just before it: a line starting `[inspect] raw verifier response (personal data redacted):`.
+         Key names are kept; true/false values are shown; every other value appears only as `[redacted …]`, and
+         the portrait as `[portrait omitted, N bytes]`. **Note where `age_over_21` sits in this output** and send
+         it to me if the result was not "Age confirmed".
    - [ ] A line listing the field names returned by the verifier.
+   - If there is a `[firewall]` line but no `[inspect]` line, DEV_INSPECT was off when the server started: it
+     must be exactly `DEV_INSPECT=1` (not `true`), and `npm run dev` must be restarted after editing `.env`.
 10. Try the other paths:
     - [ ] Press Verify and close the wallet chooser without sharing. Expected: "The wallet was closed before
           anything was shared. Nothing was shared. Press Verify to try again."
@@ -83,11 +88,33 @@ mode only; the hybrid and mock wallets ignore it.
 
 With `DEV_INSPECT=1`, every verification prints one line that starts like this:
 
-    [inspect] raw verifier response (portrait redacted): {"res":true,"cancelled":false,"authentication":{…}} resDetails={…}
+    [inspect] raw verifier response (personal data redacted): {"res":true,"cancelled":false,"authentication":{…}} resDetails={…}
 
 `res`, `cancelled` and the whole `authentication` block are printed first and in full: they are flags and
-short error strings, not personal data. The rest of `resDetails` follows, with the portrait shown only as
-`[portrait omitted, N bytes]`.
+short error strings, not personal data. The rest of `resDetails` follows with its structure and key names,
+but every value other than true/false and null is replaced by `[redacted string, N chars]` or
+`[redacted number]`, and the portrait by `[portrait omitted, N bytes]`.
+
+It is followed by the verdict line, which is printed in real mode even without DEV_INSPECT:
+
+    [firewall] decision=deny reason=authentication_checks_failed
+
+`authentication_checks_failed` is what the shop shows as "The ID did not pass a security check". For that
+reason only, the same line also says which check failed, without needing DEV_INSPECT:
+
+    [firewall] decision=deny reason=authentication_checks_failed res=true issuerRecognized=false … certValidationError="…"
+
+It lists `res`, `issuerRecognized`, `issuerSignedAuthenticated`, `deviceSignedAuthenticated`, `dataIntegrity`,
+`issuerAuthValid`, `deviceAuthValid` (each `true`, `false`, `missing` or `not-boolean`) and the first 200
+characters of `certValidationError`. No claim values are printed.
+
+For `unreadable_response` and `age_claim_missing`, the line instead describes the age claim, never its value:
+
+    [firewall] decision=deny reason=unreadable_response ageClaimType=string ageClaimPath=identity.age_over_21 ageClaimLength=4 ageClaimString=true-like
+
+`ageClaimType` is boolean, string, number, object, array, null or missing; `ageClaimPath` is where it was
+found (keys only); for a string, `ageClaimString` says whether it reads as "true", "false" or other.
+`resDetails=unparseable` means Credence's `resDetails` was not JSON at all.
 
 | Field | What it means if it is wrong |
 | --- | --- |
@@ -101,6 +128,69 @@ short error strings, not personal data. The rest of `resDetails` follows, with t
 The shop refuses whenever any of `issuerRecognized`, `issuerSignedAuthenticated`, `deviceSignedAuthenticated`
 or `dataIntegrity` is `false`, even if `res` is true. The other fields are shown to help diagnose, but they do
 not change the decision.
+
+## Workaround: `readerAuthAll` is removed from the wallet request
+
+**What:** in real mode, before the server sends `dcRequest` to the phone (from `/api/verify/start` and
+`/api/claims/:token/start`), it removes the top-level `readerAuthAll` entry from `dcRequest.deviceRequest`.
+Every other byte stays exactly as Credence produced it, including each document's `itemsRequest`;
+`encryptionInfo` is not touched. The server log shows one line each time:
+
+    [dc] removed readerAuthAll (verifier reader chain rejected by wallet)
+
+**Why:** the reader certificate chain in Credence's `readerAuthAll` has issuer and subject names encoded
+differently, so the Multipaz wallet rejects it ("Certificate chain is not valid: subject does not match
+issuer") before reading the request. In Chrome this surfaced as a `NetworkError` right after "Agree and
+continue". Without `readerAuthAll`, the wallet treats the shop as a verifier it cannot identify, but it still
+answers. The answer is still encrypted to Credence's `encryptionInfo` key and checked by Credence as before.
+
+**Scope:** real mode only, and on by default. Hybrid and mock are never changed. To send the request exactly as
+Credence returns it (for example once Credence fixes the certificate encoding), set `DC_KEEP_READER_AUTH=1`
+in `.env` yourself and restart the server. If a `deviceRequest` ever cannot be parsed, it is sent unchanged
+and the log says `[dc] deviceRequest could not be parsed as CBOR; sent unchanged`.
+
+This is a demo workaround, not a fix: report the certificate encoding to Credence so it can be removed.
+
+## Demo workarounds for the locked Credence profile
+
+Both are **demo workarounds**, real mode only. Hybrid and mock are never affected.
+
+### A. The mDL request asks for `age_over_21` only (on by default)
+
+**What:** in real mode, `/api/verify/start` and `/api/claims/:token/start` rewrite the mDL docRequest
+(`org.iso.18013.5.1.mDL`) so it asks only for `age_over_21` in `org.iso.18013.5.1`, with intentToRetain
+false. The docType, any `requestInfo`, the docRequest's other keys (such as `readerAuth`), the other
+docRequests, `version`, `deviceRequestInfo` and `encryptionInfo` are copied byte for byte. The log says:
+
+    [dc] mDL request narrowed to age_over_21 (profile asks for more)
+
+**Why:** the locked Credence profile asks for more (for example the portrait) than the shop ever uses. The
+shop only needs the yes/no age answer.
+
+**Caveats:** a reader signature covers the original request, so a per-document `readerAuth` (and
+`readerAuthAll`, if you keep it) no longer matches the narrowed request, and a wallet may reject or flag it.
+Credence may also reject an answer that lacks elements its profile expects.
+
+**Switch off:** set `DC_KEEP_REQUESTED_ELEMENTS=1` in `.env` yourself and restart the server.
+
+### B. Accept an issuer that is not on the trust list (DEMO ONLY, off by default)
+
+**What:** with `DEMO_ACCEPT_UNLISTED_ISSUER=1` in `.env` (set it yourself) and real mode, a credential whose
+**only** failed check is `issuerRecognized: false` (with `res` true, and `issuerSignedAuthenticated`,
+`deviceSignedAuthenticated` and `dataIntegrity` all true) goes on to the normal age check instead of being
+refused. Any other failed check, `res: false`, or a cancelled answer is still refused. When it is used:
+
+- the server log says `[firewall] WARNING demo override: issuer not on trust list`;
+- the privacy receipt shows "Issuer not on the trust list (demo setting)" and stores `issuerTrust: demo-unlisted`;
+- the audit CSV gets an `issuer_trust` row with `issuerTrust=demo-unlisted` for that ticket.
+
+At startup, while it is on, the server also prints a warning line.
+
+**Why:** the Multipaz test issuer is not on the locked profile's trust list, so every real test is refused at
+`issuerRecognized` even though the signatures check out.
+
+**Risk:** while this is on, anyone who can sign their own mDL passes the age check. Use it only for a demo, and
+switch it off afterwards by removing the line from `.env` and restarting.
 
 ## Switch back to hybrid
 

@@ -124,7 +124,7 @@ describe('privacy guarantees', () => {
       ],
       privacy_receipts: [
         'id', 'ticket_id', 'verification_ref', 'source', 'outcome',
-        'received_field_names', 'stored_field_names', 'discarded_field_names', 'created_at',
+        'received_field_names', 'stored_field_names', 'discarded_field_names', 'created_at', 'issuer_trust',
       ],
       checkout_events: ['id', 'session_id', 'step', 'reason', 'ts'],
       scans: [

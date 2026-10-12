@@ -2,6 +2,8 @@
 // wallet page (/wallet.html), opened on a phone or in another tab. In real mode it calls the
 // browser's Digital Credentials API (Credence ID Cloud SDK flow A).
 
+import { PHASES, describeCredential } from './wallet-debug.js';
+
 const reducedMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 /** Closes a wallet sheet with a short exit animation, then removes it. Callers settle first. */
@@ -111,6 +113,7 @@ export const REAL_MESSAGES = {
   timeout: 'The wallet did not answer in time. Nothing was shared. Press Verify to try again.',
   blocked: 'The browser blocked the wallet prompt. Tap Verify again.',
   network: 'The wallet request could not reach the network. Check your connection, then press Verify to try again.',
+  noDeviceRequest: 'The Cloud SDK did not return a deviceRequest. Run the readiness page and check your profile.',
   empty: 'The wallet did not share an ID. Check that the Driver license credential is in your wallet, then try again.',
 };
 
@@ -125,8 +128,9 @@ const REAL_OUTCOMES = {
 
 /** A problem with the real wallet prompt that has its own message. */
 class WalletProblem extends Error {
-  constructor(kind) {
-    super(REAL_MESSAGES[kind]);
+  /** `cause` keeps the browser's original error, so the debug panel can show what really happened. */
+  constructor(kind, cause) {
+    super(REAL_MESSAGES[kind], cause ? { cause } : undefined);
     this.name = 'WalletProblem';
     this.kind = kind;
   }
@@ -152,34 +156,39 @@ export function realOutcomeMessage(reason) {
  * page address passes only dcRequest.deviceRequest instead.
  */
 export function walletRequestData(dcRequest, search = globalThis.location?.search ?? '') {
-  if (!dcRequest || typeof dcRequest !== 'object' || !dcRequest.deviceRequest) {
-    throw new Error('The Cloud SDK did not return a deviceRequest. Run the readiness page and check your profile.');
-  }
+  if (!dcRequest || typeof dcRequest !== 'object' || !dcRequest.deviceRequest) throw new WalletProblem('noDeviceRequest');
   return new URLSearchParams(search).get('dcdata') === 'deviceRequest' ? dcRequest.deviceRequest : dcRequest;
 }
 
-async function realWallet(dcRequest) {
+/** `trace` (optional) records the phase and the shape of the wallet's answer for the debug panel. */
+async function realWallet(dcRequest, trace) {
+  if (trace) trace.phase = PHASES.before;
   if (!hasDigitalCredentials()) throw new WalletProblem('unsupported');
   const data = walletRequestData(dcRequest);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REAL_WALLET_TIMEOUT_MS);
   let credential;
   try {
+    if (trace) trace.phase = PHASES.during;
     credential = await navigator.credentials.get({
       digital: { requests: [{ protocol: 'org-iso-mdoc', data }] },
       mediation: 'required',
       signal: controller.signal,
     });
   } catch (err) {
-    if (controller.signal.aborted || err?.name === 'AbortError') throw new WalletProblem('timeout');
+    if (controller.signal.aborted || err?.name === 'AbortError') throw new WalletProblem('timeout', err);
     // Chrome uses NotAllowedError both for a user cancel and for a call outside a user gesture
     // ("requires transient activation"). The second is not the user's choice, so say so.
-    if (err?.name === 'NotAllowedError') throw new WalletProblem(/transient/i.test(err.message ?? '') ? 'blocked' : 'cancelled');
-    if (err?.name === 'NetworkError') throw new WalletProblem('network');
-    if (err?.name === 'NotSupportedError' || err instanceof TypeError) throw new WalletProblem('unsupported');
+    if (err?.name === 'NotAllowedError') throw new WalletProblem(/transient/i.test(err.message ?? '') ? 'blocked' : 'cancelled', err);
+    if (err?.name === 'NetworkError') throw new WalletProblem('network', err);
+    if (err?.name === 'NotSupportedError' || err instanceof TypeError) throw new WalletProblem('unsupported', err);
     throw err;
   } finally {
     clearTimeout(timer);
+  }
+  if (trace) {
+    trace.phase = PHASES.after;
+    trace.credential = describeCredential(credential);
   }
   if (!credential) throw new WalletProblem('empty');
   return typeof credential.data === 'string' ? credential.data : JSON.stringify(credential.data);
@@ -295,12 +304,22 @@ function separateWallet(sessionId) {
   });
 }
 
-export function requestWallet({ mode, dcRequest, sessionId }) {
-  return mode === 'real' ? realWallet(dcRequest) : separateWallet(sessionId);
+export function requestWallet({ mode, dcRequest, sessionId, trace = undefined }) {
+  return mode === 'real' ? realWallet(dcRequest, trace) : separateWallet(sessionId);
 }
 
-export function walletError(err) {
+/**
+ * Real mode never shows the generic "Something went wrong": an HTTP error keeps the server's
+ * message, and anything else names the error, for example "Wallet error: DataError".
+ */
+function realWalletError(err) {
+  if (typeof err?.status === 'number') return err.body?.message || `Wallet error: HTTP ${err.status}`;
+  return `Wallet error: ${err?.name || 'Error'}`;
+}
+
+export function walletError(err, mode) {
   if (err instanceof WalletProblem) return err.message; // real mode only
+  if (mode === 'real') return realWalletError(err);
   if (err instanceof DOMException) {
     if (err.name === 'NotAllowedError') return 'The wallet prompt was cancelled or blocked. Try again.';
     if (err.name === 'AbortError') return 'The wallet request timed out. Try again.';

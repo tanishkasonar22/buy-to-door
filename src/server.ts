@@ -27,6 +27,10 @@ if (config.verifierMode === 'real' || config.verifierMode === 'hybrid') {
     licenseKey: config.licenseKey,
     profileId: config.profileId,
     origin: config.origin,
+    // Real mode: log which Origin header each Cloud SDK call carries (scheme + host only),
+    // and send Origin on getDocRequest and verifyDocRequest too. Hybrid keeps the old behaviour.
+    log: config.verifierMode === 'real' ? (line) => console.log(line) : undefined,
+    originOnAllCalls: config.verifierMode === 'real',
   });
   verifier = config.verifierMode === 'hybrid' ? new HybridVerifier(client, config.ageClaimKey) : new CredenceVerifier(client);
 } else {
@@ -42,9 +46,16 @@ const app = createApp({
   inspect: config.inspect,
   claimTtlHours: config.claimTtlHours,
   readinessToken: config.readinessToken,
+  stripReaderAuth: !config.keepReaderAuth,
+  narrowRequest: !config.keepRequestedElements,
+  demoAcceptUnlistedIssuer: config.demoAcceptUnlistedIssuer,
   cloud: { licenseKey: config.licenseKey, profileId: config.profileId, origin: config.origin, baseUrl: config.cloudBaseUrl, client },
   log: (...a) => console.log(...a),
 });
+
+if (config.verifierMode === 'real' && config.demoAcceptUnlistedIssuer) {
+  console.log('[firewall] WARNING demo override enabled: credentials from issuers not on the trust list are accepted when all other checks pass. Do not use outside a demo.');
+}
 
 app.listen(config.port, () => {
   console.log(`Buy to Door running at http://localhost:${config.port} (verifier: ${config.verifierMode})`);

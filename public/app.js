@@ -5,6 +5,7 @@ import { copyText, el, renderNoData, renderReceipt, renderTicket } from './rende
 import { mountStage, openInSteps, setDoor } from './door.js';
 import { initShell, setJourney } from './shell.js';
 import { hasDigitalCredentials, realOutcomeMessage, requestWallet, walletError } from './wallet.js';
+import { markConfirm, newTrace, reportRealFailure } from './wallet-debug.js';
 
 const $ = (id) => document.getElementById(id);
 const verifyBtn = $('verify');
@@ -63,6 +64,7 @@ const setBusy = (busy) => {
 };
 
 async function verify() {
+  const trace = mode === 'real' ? newTrace() : undefined; // real-mode debug only
   setBusy(true);
   setStatus('Waiting for your wallet…');
   setJourney({ buy: 'done', verify: 'current' });
@@ -70,9 +72,9 @@ async function verify() {
   try {
     const quantity = Number($('quantity').value);
     const { sessionId, dcRequest } = await takeStart();
-    const data = await requestWallet({ mode, dcRequest, sessionId });
+    const data = await requestWallet({ mode, dcRequest, sessionId, trace });
     setStatus('Checking your ID…');
-    const result = await api('/api/verify/confirm', { sessionId, data, quantity });
+    const result = await api('/api/verify/confirm', { sessionId, data, quantity }, {}, markConfirm(trace));
     renderTicket($('ticket-box'), result.ticket);
     renderOrder(result.order);
     renderReceipt($('receipt-box'), result.receipt);
@@ -82,11 +84,13 @@ async function verify() {
       openInSteps('open');
     } else {
       setStatus((mode === 'real' && realOutcomeMessage(result.reason)) || `${label(result.reason)}. No ticket was issued.`, 'error');
+      if (trace) reportRealFailure(null, trace, { result, statusEl });
       setJourney({ buy: 'done', verify: 'blocked' });
       setDoor('locked', `Locked: ${label(result.reason).toLowerCase()}`);
     }
   } catch (err) {
-    setStatus(walletError(err), 'error');
+    setStatus(walletError(err, mode), 'error');
+    if (trace) reportRealFailure(err, trace, { statusEl });
     setJourney({ buy: 'current' });
     setDoor('closed');
   } finally {

@@ -47,7 +47,8 @@ export function openDb(path: string): Db {
       received_field_names text not null,
       stored_field_names text not null,
       discarded_field_names text not null,
-      created_at text not null
+      created_at text not null,
+      issuer_trust text
     );
     create table if not exists checkout_events (
       id integer primary key autoincrement,
@@ -75,6 +76,11 @@ export function openDb(path: string): Db {
   const cols = db.prepare('pragma table_info(tickets)').all() as { name: string }[];
   if (!cols.some((c) => c.name === 'gate_check')) {
     db.exec('alter table tickets add column gate_check integer not null default 0');
+  }
+  // issuer_trust: set only when the DEMO override accepted an issuer missing from the trust list.
+  const receiptCols = db.prepare('pragma table_info(privacy_receipts)').all() as { name: string }[];
+  if (!receiptCols.some((c) => c.name === 'issuer_trust')) {
+    db.exec('alter table privacy_receipts add column issuer_trust text');
   }
   return db;
 }

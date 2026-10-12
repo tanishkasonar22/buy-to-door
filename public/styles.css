@@ -1231,3 +1231,30 @@ body.wallet-page .wallet-done { text-align: center; }
   .check-state { grid-row: auto; }
   .stage-ticket-face .st-meta { display: none; }
 }
+
+/* Real-mode wallet debug panel (?debug=1 only) */
+.wallet-debug {
+  margin: var(--space-3) 0 0;
+  padding: var(--space-3) var(--space-4);
+  border: 1px dashed var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  color: var(--ink);
+  font: var(--step--2)/1.5 var(--font-mono);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 40vh;
+  overflow: auto;
+}
+
+/* Privacy receipt: shown only when the demo issuer-trust override was used */
+.receipt-warning {
+  margin: 0 0 var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-left: 4px solid var(--warn);
+  border-radius: var(--r-sm);
+  background: var(--warn-bg);
+  color: var(--warn);
+  font-weight: 700;
+}
+.receipt-warning::before { content: '⚠ '; }

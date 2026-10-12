@@ -14,6 +14,8 @@ export interface Receipt {
   storedFieldNames: string[];
   discardedFieldNames: string[];
   createdAt: string;
+  /** Only present when the DEMO override accepted an issuer that is not on the trust list. */
+  issuerTrust?: 'demo-unlisted';
 }
 
 /**
@@ -37,14 +39,15 @@ export function buildReceipt(args: {
     storedFieldNames: args.kept ? [...VERIFICATION_COLUMNS] : [],
     discardedFieldNames: args.fw.discardedFieldNames,
     createdAt: new Date().toISOString(),
+    ...(args.fw.issuerTrust ? { issuerTrust: args.fw.issuerTrust } : {}),
   };
 }
 
 export function saveReceipt(db: Db, r: Receipt): void {
   db.prepare(
     `insert into privacy_receipts
-     (id, ticket_id, verification_ref, source, outcome, received_field_names, stored_field_names, discarded_field_names, created_at)
-     values (?,?,?,?,?,?,?,?,?)`,
+     (id, ticket_id, verification_ref, source, outcome, received_field_names, stored_field_names, discarded_field_names, created_at, issuer_trust)
+     values (?,?,?,?,?,?,?,?,?,?)`,
   ).run(
     r.id,
     r.ticketId,
@@ -55,6 +58,7 @@ export function saveReceipt(db: Db, r: Receipt): void {
     JSON.stringify(r.storedFieldNames),
     JSON.stringify(r.discardedFieldNames),
     r.createdAt,
+    r.issuerTrust ?? null,
   );
 }
 
@@ -71,5 +75,6 @@ export function loadReceipt(db: Db, id: string): Receipt | null {
     storedFieldNames: JSON.parse(row.stored_field_names),
     discardedFieldNames: JSON.parse(row.discarded_field_names),
     createdAt: row.created_at,
+    ...(row.issuer_trust ? { issuerTrust: row.issuer_trust } : {}),
   };
 }
