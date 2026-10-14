@@ -1,79 +1,176 @@
 # Buy to Door
 
-Age-verified ticketing prototype: checkout with a wallet age check, group tickets with guest claim links,
-a privacy receipt, a data firewall, a gate page and an operations dashboard. Buyers and guests without a
-mobile ID can still get a ticket, and the dashboard exports an audit CSV.
+**Show your age, not your life.**
 
-Built for the Credence ID Solution Engineer assignment. Code written with AI assistance (Claude); the deck and pitch are my own.
+Buy to Door is an age-verified ticket shop built on the **Credence Cloud SDK**. A buyer proves they are over 21 from the digital ID in their phone wallet, and the shop learns one thing: **yes or no**. No name, no birth date and no photo is stored.
 
-## Run it (mock mode, no keys needed)
+Designed and built by Tanishka Sonar this week for the Credence ID Solution Engineer assignment using **Credence Cloud SDK**. AI tools (Claude Code, Anti gravity, Google Gemini) helped me build the project; I reviewed and tested the code with various cases and can explain every part.
 
-    npm install
-    cp .env.example .env        # VERIFIER_MODE=mock is the default
-    npm run dev                 # http://localhost:3000
-    npm run seed                # optional: fills the dashboard with demo data (server must be running)
-    npm test                    # 143 tests
-    npx tsc --noEmit
+> Private repository. Shared for evaluation only.
 
-Pages: `/` shop, `/claim.html?t=...` guest claim, `/order.html?o=...` order tracking, `/gate.html`, `/dashboard.html`, `/readiness.html`.
+---
 
-## No mobile ID
+## What it does
 
-Many people (for example in Texas) have no mobile ID. The shop and the guest claim page both have an
-"I don't have a mobile ID" button. It issues the ticket straight away, collects no ID data online and
-creates no privacy receipt, because nothing about the person was received. The ticket is marked
-"ID check at the gate":
+1. The buyer picks a ticket and taps **Verify age**.
+2. Their phone wallet opens and shows the single question being asked: *am I over 21?* The buyer approves.
+3. Credence checks that the ID is genuine, is on that phone, has not been altered, and is still valid.
+4. A strict rule in the shop accepts only a clear **yes** and issues a one-time, signed ticket.
+5. The buyer gets a **privacy receipt** listing what the shop kept (one yes) and what it discarded (for example the portrait and issuing authority).
 
-- The gate page says the age was not checked online and hides the manager override.
-- The server refuses an override on these tickets (`id_check_required`). Staff must check a physical ID
-  (recorded as a staff result) or a mobile ID.
-- The order page labels these tickets, and the dashboard counts them.
+Buyers without a digital ID can choose **"I do not have a mobile ID"**. They get a ticket marked for an ID check at the gate, and no verification data is stored.
 
-## Audit export
+## Who sees what
 
-`/dashboard.html` has a "Download audit CSV" link (`GET /api/export/audit.csv`). It has one row per
-checkout step, order, ticket, claim and gate scan, oldest first, with ticket and order IDs, times,
-methods and results. It never contains names, birth dates, photos, ticket codes, claim links, session
-IDs or verification references. Cells that start with `=`, `+`, `-` or `@` are prefixed with `'`, so a
-spreadsheet will not run them as formulas.
-
-## Modes
-
-| `VERIFIER_MODE` | Cloud SDK | Wallet answer |
+| View | Screen | For |
 | --- | --- | --- |
-| `mock` | not called | simulated |
-| `hybrid` | **called for real on every checkout, claim and gate check** | simulated (labelled on screen) |
-| `real` | called for real | real wallet response |
+| Buyer | **Shop** | Buying a ticket and verifying age |
+| Organiser | **Dashboard** | Verified and refused counts, with no personal details |
+| Organiser | **Readiness** | "Setup checks": press **Run checks** to confirm the Credence connection is set up and working |
+| Organiser | **Gate** | Staff see whether a buyer's age was already checked online |
 
-Use `hybrid` when you have a Cloud SDK key but no wallet credential. The dashboard shows how many requests were created through the SDK since the server started.
+The Shop is the buyer's view. Dashboard, Readiness and Gate are organiser views. I combined them in one prototype so the whole flow can be seen in one place. In a real deployment, the organiser screens would sit behind a login.
 
-## Run it against the real Cloud SDK (hybrid or real)
+---
 
-1. Create a free Evaluation key at verify.credenceid.com and copy the license key and profile ID.
-2. Start an HTTPS tunnel to port 3000 and register that origin (public HTTPS only; localhost and IPs are rejected).
-3. In `.env` set `VERIFIER_MODE=hybrid` (or `real` once you have a credential), `CLOUDSDK_LICENSE_KEY`, `CLOUDSDK_PROFILE_ID`, `CLOUDSDK_ORIGIN`, a long random `TICKET_SIGNING_SECRET`, and a `READINESS_TOKEN`.
-4. Open `/readiness.html` through the tunnel, enter the token, run the checks, and fix anything marked Fail.
-5. Use `DEV_INSPECT=1` once to see which field name your profile returns for the age result, then set `AGE_CLAIM_KEY`.
-6. On an iPhone, open the tunnel address in Safari 17.4+ (iOS 17.4+). Only flow A (Apple Wallet) is built here.
+## Quick start (about 10 minutes, no phone needed)
 
-## What is real and what is simulated
+This runs the project in **mock mode**, with a simulated wallet. It needs no Credence license.
 
-| Part | Status |
+**You need:** Node.js 22 or later and npm.
+## See the real wallet
+
+The full flow runs on a **real Android wallet** and **real Credence Cloud SDK calls**. It is shown in the demo video: [VIDEO LINK].
+
+**Real mode needs a Credence license tied to a registered web address, so it can't run straight from a clone. The quick start below uses **mock mode** (simulated wallet), so you can try the same flow in minutes. But the app works better with the real id. To run real mode yourself, use your own Credence license and follow [`docs/REAL_WALLET_TEST.md`](docs/REAL_WALLET_TEST.md). I'm also happy to run it live on a call.**
+
+```bash
+git clone -b real-wallet https://github.com/tanishkasonar22/buy-to-door.git
+cd buy-to-door
+npm install
+cp .env.example .env        
+npm test                   
+npm run dev
+```
+
+Open **http://localhost:3000** in your browser.
+
+### Try it
+
+| Step | What to do | What you should see |
+| --- | --- | --- |
+| 1 | On the Shop, choose a ticket and tap **Verify age** | A request is created for the simulated wallet |
+| 2 | Open the simulated wallet page and pick **pass** | The wallet shares the over-21 answer |
+| 3 | Confirm in the shop | A ticket and a privacy receipt: one yes kept, the rest discarded |
+| 4 | Repeat with the **under-age** scenario | The check says no and **no ticket is issued** |
+| 5 | Repeat with **decline** | The shop reports the decline and does not confirm |
+| 6 | Choose **I do not have a mobile ID** | A ticket marked for a check at the gate |
+| 7 | Open **Readiness** and press **Run checks** | The setup checks run and show their results |
+| 8 | Open **Dashboard** and **Gate** | Counts with no personal details, and the gate view of each ticket |
+
+---
+
+## Run it with the real Credence Cloud SDK
+
+There are three modes, set with `VERIFIER_MODE` in your local `.env`.
+
+| Mode | Wallet | Credence Cloud SDK | Use it for |
+| --- | --- | --- | --- |
+| `mock` | Simulated | Simulated | Evaluating the flow, running the tests |
+| `hybrid` | Simulated | **Real calls** | A reliable demo of the real verification path |
+| `real` | **Real Android wallet** | **Real calls** | The full end-to-end flow |
+
+**For `hybrid` and `real` you need:**
+- A Credence license key and a profile ID, from the Credence developer documentation.
+- A public HTTPS address registered against your license. The shop sends this address on every Credence call, because the wallet ties its answer to it. A tunnel such as ngrok works for testing.
+
+**For `real` you also need:**
+- An Android phone with a current Chrome (tested with Chrome 154).
+- A wallet that can answer a request. This project was tested with the open-source Multipaz test wallet (`org.multipaz.testapp`), holding a test driver's license created inside the wallet, because a state mobile ID was not available to me.
+
+Step-by-step instructions are in [`docs/REAL_WALLET_TEST.md`](docs/REAL_WALLET_TEST.md).
+
+### Settings (names only; set values in your own `.env`, which is never committed)
+
+| Setting | Purpose |
 | --- | --- |
-| Tickets, group orders, claim links, race handling, privacy receipt, firewall, dashboard | Real, covered by tests |
-| No-mobile-ID tickets and the audit CSV | Real, covered by tests |
-| Wallet consent and response in mock mode | Simulated, labelled on screen |
-| Cloud SDK setup and request creation (hybrid and real modes) | Real code, tested against a fake SDK; not run against the live service from my build environment |
-| Apple Wallet response verification | Written to the documented flow, not yet run with a real credential |
-| Physical ID check at the gate | Done in Credence ID's Tap2iD Mobile app; staff record the result, labelled "staff-recorded" |
-| Tap2iD SDK | Not integrated |
+| `VERIFIER_MODE` | `mock`, `hybrid` or `real` |
+| `CLOUDSDK_LICENSE_KEY` | Your Credence license key |
+| `CLOUDSDK_PROFILE_ID` | Your Credence profile ID |
+| `CLOUDSDK_ORIGIN` | The public HTTPS address registered with your license |
+| `DEV_INSPECT` | Developer view of the verdict, with personal values redacted |
+| `DC_KEEP_READER_AUTH` | Turns off the reader-signature removal (see below) |
+| `DC_KEEP_REQUESTED_ELEMENTS` | Turns off the age-only narrowing of the request |
+| `DEMO_ACCEPT_UNLISTED_ISSUER` | Demo-only switch (see below). Off by default |
 
-## Not verified yet
+---
 
-- The real Cloud SDK path end to end.
-- The age field name for your profile (`AGE_CLAIM_KEY`).
-- Whether a request can be created without a credential present.
+## How the Credence Cloud SDK is used
 
+The server makes four REST calls, all with the registered page address:
 
-In the project folder, run npm run dev.
-In a second tab, run ngrok http --url=joyride-contently-scapegoat.ngrok-free.dev 3000.
+| Call | Purpose |
+| --- | --- |
+| `setup` | Starts a session using the license, profile and registered address, and returns a token |
+| `refresh` | Keeps the session alive |
+| `getDocRequest` | Returns the request the wallet will show to the buyer |
+| `verifyDocRequest` | Checks the wallet's answer and returns a verdict |
+
+The verdict says whether the signatures are valid, whether the phone holds the ID, whether the data is intact and in date, and the age answer. A strict gatekeeper in the shop then accepts only a real **true** for "over 21" and denies everything else with a reason code.
+
+**Privacy by design**
+- The request is narrowed to a single question: over 21.
+- Anything else that comes back (for example the portrait) is discarded before anything is saved.
+- Tickets are HMAC-signed and single-use. Claim tokens are stored only as hashes.
+- Every decision is written to an audit log with no personal values.
+- Stored data: the age answer, a hashed one-time token, and the audit log.
+
+---
+
+## Real wallet: what is proven and what is not finished
+
+**Proven:** a real Android wallet answered a live Credence request end to end. Credence confirmed the signatures, the device and the data integrity, the shop kept nothing personal, and a ticket was issued.
+
+**Three demo shortcuts**, used because the test wallet's ID source is not one Credence already recognises:
+
+1. **Reader signature removed** (applied in real mode). Credence's reader certificate lists its issuer name in a different attribute order from its CA, so the wallet rejects the chain. Turn this off with `DC_KEEP_READER_AUTH`.
+2. **Request narrowed to age only** (on by default). The default profile did not request age by itself. Turn this off with `DC_KEEP_REQUESTED_ELEMENTS`.
+3. **Unlisted ID source accepted** (**off by default**). Applies only when every other check passes, prints a warning when enabled, and is labelled on the receipt. With it on, the age check could be forged, so never enable it outside a demo.
+
+With a recognised ID source and a corrected reader certificate, the shortcuts are not needed.
+
+### Nine integration hurdles found
+
+Six are solved in the code: an old browser, an empty wallet, a partial request, strict matching, the missing page address, and the age answer arriving as text. Three are handled with the demo shortcuts above and flagged for a production fix: the rejected security certificate, the unlisted ID source, and the age question not being in the profile. The hardest looked like a vague browser "network error" until the phone's own log showed the real cause.
+
+---
+
+## Tests
+
+```bash
+npm test
+```
+
+266 automated tests in 23 files cover the firewall, the Credence client, request rewriting, the receipts, the gate, the dashboard and the readiness checks, including the cases where the answer must be **no**.
+
+---
+
+## Project map
+
+| Path | Job |
+| --- | --- |
+| `src/app.ts` | Routes: start, confirm, claim |
+| `src/cloudsdk.ts` | Credence client (the four calls) |
+| `src/identity.ts` | Verifier modes and age-value normalisation |
+| `src/firewall.ts` | The strict decision gate |
+| `src/stripReaderAuth.ts`, `src/narrowRequest.ts` | Request rewriting for the real-wallet demo |
+| `src/receipt.ts`, `src/audit.ts`, `src/db.ts` | Privacy receipt, audit log, storage |
+| `public/` | Browser pages |
+| `docs/REAL_WALLET_TEST.md` | Real wallet test steps |
+| `tests/` | Automated tests |
+
+---
+
+## Contact
+
+Tanishka Sonar · tanishkanitin357@gmail.com
