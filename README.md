@@ -4,9 +4,8 @@
 
 Buy to Door is an age-verified ticket shop built on the **Credence Cloud SDK**. A buyer proves they are over 21 from the digital ID in their phone wallet, and the shop learns one thing: **yes or no**. No name, no birth date and no photo is stored.
 
-Designed and built by Tanishka Sonar this week for the Credence ID Solution Engineer assignment using **Credence Cloud SDK**. AI tools (Claude Code, Anti gravity, Google Gemini) helped me build the project; I reviewed and tested the code with various cases and can explain every part.
+Designed and built by Tanishka Sonar this week as a prototype on the **Credence Cloud SDK**. AI tools (Claude Code, Anti gravity, Google Gemini) helped me build the project; I reviewed and tested the code with various cases and can explain every part.
 
-> Private repository. Shared for evaluation only.
 
 ---
 
